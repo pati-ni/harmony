@@ -206,7 +206,6 @@ HarmonyMatrix <- function(
     harmonyObj$init_cluster_cpp(0)
     
     ## if (plot_convergence) graphics::plot(HarmonyConvergencePlot(harmonyObj))
-
     
 
     harmonize(harmonyObj, max.iter.harmony, verbose)
@@ -220,8 +219,6 @@ HarmonyMatrix <- function(
         res <- as.matrix(harmonyObj$Z_corr)
         row.names(res) <- row.names(data_mat)
         colnames(res) <- colnames(data_mat)
-        if (!cells_as_cols) 
-            res <- t(res)
         return(res)      
     }
 }

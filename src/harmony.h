@@ -44,6 +44,8 @@ public:
   MATTYPE R, Z_orig, Z_corr, Z_cos, Y, Phi, Phi_moe; 
   VECTYPE Pr_b, theta, N_b, sigma, sigma_prior;
   MATTYPE lambda; // diagonal MATTYPErix of ridge regression penalties
+
+  arma::sp_mat _Phi, _Phi_moe, _lambda, _Rk;
   
   vector<float> objective_kmeans, objective_kmeans_dist, objective_kmeans_entropy, objective_kmeans_cross, objective_harmony;
   vector<int> kmeans_rounds; // OLD: Kb

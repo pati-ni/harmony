@@ -9,6 +9,7 @@
 struct TimerMeta{
   double elapsed = 0;
   double last = 0;
+  unsigned iter = 0;
 };
 
 
@@ -30,6 +31,7 @@ class Timer{
   Timer(TimerMeta& t) : timer(t.elapsed){
     t.last = this->timer;
     this->start = high_resolution_clock::now();
+    t.iter++;
   }
   
   double getLapse(){
@@ -108,6 +110,12 @@ void harmony::allocate_buffers() {
   
   MATTYPE intcpt = ones(1, N);
   Phi_moe = join_cols(intcpt, Phi);
+  
+  _Phi_moe = Phi_moe;
+  _Phi = Phi;
+  _lambda = lambda;
+  _Rk = arma::sp_mat(N,N);
+
   
   W = zeros<MATTYPE>(B + 1, d);
   // Phi_Rk = zeros<MATTYPE>(B + 1, N);  
@@ -205,7 +213,7 @@ bool harmony::check_convergence(int type) {
 
 int harmony::cluster_cpp() {
   int err_status = 0;
-  Progress p(max_iter_kmeans, verbose);
+  Progress p(max_iter_kmeans, false);
   unsigned iter;
   
   // Z_cos has changed
@@ -265,16 +273,15 @@ int harmony::cluster_cpp() {
     //     " cros_error "<< objective_kmeans_cross.back() <<
     //     " entr_error "<< objective_kmeans_entropy.back() << std::endl;
         
-    // Rcout << "In iteration "<< iter << " " << (timers["iteration_cluster_cpp"].elapsed - timers["iteration_cluster_cpp"].last) / 1000 << std::endl;
-    for(auto& v : timers){
+    Rcout << "\rIn iteration "<< iter << " " << (timers["iteration_cluster_cpp"].elapsed - timers["iteration_cluster_cpp"].last) / 1000;
+    // for(auto& v : timers){
       // Rcout <<"\tTask " << v.first << " took " << v.second.elapsed - v.second.last <<" Overall: " << v.second.elapsed/1000 << std::endl;
-    }
-
-    Rcout <<
-        " error: " << this->objective_kmeans.back()  <<
-        " dist_error "<< objective_kmeans_dist.back() <<
-        " cros_error "<< objective_kmeans_cross.back() <<
-        " entr_error "<< objective_kmeans_entropy.back() << std::endl;
+    // }
+    // Rcout <<
+    //     " error: " << this->objective_kmeans.back()  <<
+    //     " dist_error "<< objective_kmeans_dist.back() <<
+    //     " cros_error "<< objective_kmeans_cross.back() <<
+    //     " entr_error "<< objective_kmeans_entropy.back() << std::endl;
   }
 
   Rcout << std::endl;
@@ -296,7 +303,7 @@ int harmony::update_R() {
   reverse_index.rows(update_order) = indices;
   
   {
-    Timer t(timers["update_R_transform"]);    
+    Timer t(timers["update_R_transform"]);
     
     _scale_dist = -dist_mat; // K x N
     _scale_dist.each_col() /= sigma; // NEW: vector sigma
@@ -311,7 +318,7 @@ int harmony::update_R() {
   // Allocate new matrices
   Timer* tp = new Timer(timers["R_update_alloc"]);
   MATTYPE R_randomized = R.cols(update_order);
-  arma::sp_mat Phi_randomized(Phi.cols(update_order));
+  arma::sp_mat Phi_randomized = _Phi.cols(update_order);
   arma::sp_mat Phi_t_randomized(Phi_randomized.t());
   MATTYPE _scale_dist_randomized = _scale_dist.cols(update_order);
   delete tp;
@@ -364,16 +371,16 @@ int harmony::update_R() {
 
 void harmony::moe_correct_ridge_cpp() {
 
+  
+  
   Progress p(K, false);
-  arma::sp_mat _Phi_moe(Phi_moe), _lambda(lambda), _Rk(N, N);
   
   Z_corr = Z_orig;
       
   for (unsigned k = 0; k < K; k++) {
     {
       if (Progress::check_abort())
-        return;
-      
+        return;      
       Timer t(timers["correction"]);
       _Rk.diag() = R.row(k);
       arma::sp_mat Phi_Rk = _Phi_moe * _Rk;
@@ -381,9 +388,14 @@ void harmony::moe_correct_ridge_cpp() {
       W.row(0).zeros(); // do not remove the intercept 
       Z_corr -= W.t() * Phi_Rk;
     }
-    Rcout << "\rIn iteration " << k << " " << (timers["correction"].elapsed - timers["correction"].last) / 1000;
+    Rcout << "\rCorrection iteration: " << k << " " << (timers["correction"].elapsed - timers["correction"].last) / 1000;
   }
   Z_cos = arma::normalise(Z_corr, 2, 0);
+  Rcout << std::endl;
+  for (auto& v : timers) {
+    Rcout <<"\tTask " << v.first << " took " << v.second.elapsed/1000 <<" seconds Avg of "<< v.second.iter <<" iterations: " << (v.second.elapsed/v.second.iter)/1000 << std::endl;
+  }
+  
 }
 
 RCPP_MODULE(harmony_module) {
