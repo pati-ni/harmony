@@ -52,7 +52,7 @@ public:
   unsigned int N, K, B, d, max_iter_kmeans, window_size;
 
   // buffers
-  MATTYPE _scale_dist, dist_mat, O, E, dir_prior; // N_k, N_kb, N_b, numerator, denominator, C;
+    MATTYPE _scale_dist, dist_mat, O, E, dir_prior, theta_my; // N_k, N_kb, N_b, numerator, denominator, C;
   uvec update_order, cells_update;
   MATTYPE W;
     

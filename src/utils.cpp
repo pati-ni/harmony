@@ -50,3 +50,40 @@ int my_ceil(float num) {
     }
     return inum + 1;
 }
+
+
+arma::mat estimate_residuals(const arma::mat& O, const arma::mat& E){
+    int B = O.n_cols, K = O.n_rows;
+    // Intercept E, one-hot k, one-hot b
+    const int dof=2;
+    // Subtract from the design matrix the degrees of freedom of the parameters!
+    arma::mat design = arma::zeros(K*B, 2 + B + K - dof);
+    
+    // Assign one to intercepts
+    design.col(0) = arma::ones(design.n_rows);
+    // Assign E to the first
+    design.col(1) = arma::vectorise(E);
+    
+    auto O_flat = arma::vectorise(O);
+    
+    // Get estimates
+    for(int b = 0; b < B; b++) {
+	for(int k = 0; k < K; k++) {
+	    int index = (b * K) + k;
+	    if(b!=0){
+		design(index, 2 + b - 1) = 1;
+	    }
+	    if(k !=0){
+		design(index, 2 + B - 1 + k - 1) = 1;		
+	    }	    
+	}
+    }
+    
+    // Perform linear regression
+    arma::mat spectra = arma::inv(design.t() * design);
+    arma::mat betas = spectra * design.t() * O_flat;
+    arma::mat O_est = design * betas;
+    
+    // Return estimations
+    return arma::reshape(O_est, K, B);
+}

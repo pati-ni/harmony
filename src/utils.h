@@ -12,3 +12,6 @@ VECTYPE calculate_norm(const MATTYPE& M);
 
 
 int my_ceil(float num);
+
+
+arma::mat estimate_residuals(const arma::mat& O, const arma::mat& E);

@@ -183,7 +183,6 @@ int harmony::cluster_cpp() {
 
       dist_mat = 2 * (1 - Y.t() * Z_cos); // Y was changed
 
-        
       // STEP 3: Update R    
       err_status = update_R();
     
@@ -208,8 +207,6 @@ int harmony::cluster_cpp() {
   objective_harmony.push_back(objective_kmeans.back());
   return 0;
 }
-
-
 
 
 
@@ -239,21 +236,37 @@ int harmony::update_R() {
   arma::sp_mat Phi_t_randomized(Phi_randomized.t());
   MATTYPE _scale_dist_randomized = _scale_dist.cols(update_order);
 
+  // Shrink O according to estimator residuals
+  arma::mat O_norm = log(O+1);
+  arma::mat O_est =  estimate_residuals(O_norm, E);
+  
+  arma::mat residuals = (O_est - O_norm) % (O_est - O_norm);
+  
+  // Rcout << residuals << std::endl;
+  float std_dev = sqrt(accu(residuals));
+  // Rcout << std_dev << std::endl;
+  theta_my = arma::exp(-arma::mat(arma::pow(residuals, -1) * std_dev));
+  // Rcout << theta_my << std::endl;
+  // auto pow_test = arma::zeros(ind_theta.n_rows, ind_theta.n_cols);
+  // Rcout << pow_test << std::endl;
+  
   for (unsigned i = 0; i < n_blocks; i++) {
-      unsigned idx_max = min((i+1) * cells_per_block, N-1);
-
+      
+      unsigned idx_max = min((i+1)*cells_per_block, N-1);
       auto Rcells = R_randomized.submat(0, i*cells_per_block, R_randomized.n_rows - 1, idx_max);
       auto Phicells = Phi_randomized.submat(0, i*cells_per_block, Phi_randomized.n_rows - 1, idx_max);
       auto Phi_tcells = Phi_t_randomized.submat(i*cells_per_block, 0, idx_max, Phi_t_randomized.n_cols - 1);
       auto _scale_distcells = _scale_dist_randomized.submat(0, i*cells_per_block, _scale_dist_randomized.n_rows - 1, idx_max);
-
+      
       // Step 1: remove cells
       E -= sum(Rcells, 1) * Pr_b.t();
       O -= Rcells * Phi_tcells;
 
+      
+      
       // Step 2: recompute R for removed cells
       Rcells = _scale_distcells;
-      Rcells = Rcells % (harmony_pow((E + 1) / (O + 1), theta) * Phicells);
+      Rcells = Rcells % (arma::pow((E + 1) / (O + 1), theta_my) * Phicells);
       Rcells = normalise(Rcells, 1, 0); // L1 norm columns
 
       // Step 3: put cells back 
@@ -271,7 +284,7 @@ void harmony::moe_correct_ridge_cpp() {
   arma::sp_mat _Rk(N, N);
   
   Z_corr = Z_orig;
-      
+
   for (unsigned k = 0; k < K; k++) {
       
       if (Progress::check_abort())
@@ -280,11 +293,13 @@ void harmony::moe_correct_ridge_cpp() {
       _Rk.diag() = R.row(k);
       arma::sp_mat Phi_Rk = Phi_moe * _Rk;
       W = arma::inv(arma::mat(Phi_Rk * Phi_moe_t + lambda)) * Phi_Rk * Z_orig.t();
+      Y.col(k) = W.row(0).t();
       W.row(0).zeros(); // do not remove the intercept 
       Z_corr -= W.t() * Phi_Rk;
       
   }
   Z_cos = arma::normalise(Z_corr, 2, 0);
+  dist_mat = 2 * (1 - Y.t() * Z_cos);
 }
 
 RCPP_MODULE(harmony_module) {
@@ -293,7 +308,8 @@ RCPP_MODULE(harmony_module) {
       .field("Z_corr", &harmony::Z_corr)
       .field("objective_kmeans_dist", &harmony::objective_kmeans_dist)
       .field("objective_kmeans_entropy", &harmony::objective_kmeans_entropy)
-      .field("objective_kmeans_cross", &harmony::objective_kmeans_cross)    
+      .field("objective_kmeans_cross", &harmony::objective_kmeans_cross)
+      .field("objective_kmeans", &harmony::objective_kmeans)
       .field("objective_harmony", &harmony::objective_harmony)
       .method("check_convergence", &harmony::check_convergence)
       .method("setup", &harmony::setup)
