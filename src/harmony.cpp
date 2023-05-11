@@ -240,11 +240,8 @@ int harmony::update_R() {
   arma::mat O_norm = log(O+1);
   arma::mat O_est =  estimate_residuals(O_norm, E);
   
-  arma::mat residuals = (O_est - O_norm) % (O_est - O_norm);
-  
-  // Rcout << residuals << std::endl;
+  arma::mat residuals = (O_est - O_norm) % (O_est - O_norm);  
   float std_dev = sqrt(accu(residuals));
-  // Rcout << std_dev << std::endl;
   theta_my = arma::exp(-arma::mat(arma::pow(residuals, -1) * std_dev));
   // Rcout << theta_my << std::endl;
   // auto pow_test = arma::zeros(ind_theta.n_rows, ind_theta.n_cols);
@@ -306,6 +303,19 @@ RCPP_MODULE(harmony_module) {
   class_<harmony>("harmony")
       .constructor()
       .field("Z_corr", &harmony::Z_corr)
+      .field("Z_cos", &harmony::Z_cos)
+      .field("Z_orig", &harmony::Z_orig)
+      .field("Phi", &harmony::Phi)
+      .field("Phi_moe", &harmony::Phi_moe)
+      .field("N", &harmony::N)
+      .field("B", &harmony::B)      
+      .field("K", &harmony::K)
+      .field("O", &harmony::O)
+      .field("E", &harmony::E)
+      .field("Pr_b", &harmony::Pr_b)
+      .field("W", &harmony::W)
+      .field("R", &harmony::R)
+      .field("lambda", &harmony::lambda)
       .field("objective_kmeans_dist", &harmony::objective_kmeans_dist)
       .field("objective_kmeans_entropy", &harmony::objective_kmeans_entropy)
       .field("objective_kmeans_cross", &harmony::objective_kmeans_cross)
