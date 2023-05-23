@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <utility>
 
 #include "harmony.h"
 #include "types.h"
@@ -72,7 +73,9 @@ void harmony::allocate_buffers() {
   Phi_moe = join_cols(intcpt, Phi);
   Phi_moe_t = Phi_moe.t();
   W = zeros<MATTYPE>(B + 1, d);
-  
+
+  vector<MATTYPE>_W_k(K, zeros<MATTYPE>(B+1, d));
+  W_k = std::move(_W_k);
 }
 
 
@@ -269,9 +272,9 @@ void harmony::moe_correct_ridge_cpp() {
       
       _Rk.diag() = R.row(k);
       arma::sp_mat Phi_Rk = Phi_moe * _Rk;
-      W = arma::inv(arma::mat(Phi_Rk * Phi_moe_t + lambda)) * Phi_Rk * Z_orig.t();
-      W.row(0).zeros(); // do not remove the intercept 
-      Z_corr -= W.t() * Phi_Rk;
+      W_k[k] = arma::inv(arma::mat(Phi_Rk * Phi_moe_t + lambda)) * Phi_Rk * Z_orig.t();
+      W_k[k].row(0).zeros(); // do not remove the intercept 
+      Z_corr -= W_k[k].t() * Phi_Rk;
       
   }
   Z_cos = arma::normalise(Z_corr, 2, 0);
@@ -294,16 +297,17 @@ RCPP_MODULE(harmony_module) {
       .field("Y", &harmony::Y)
       .field("Pr_b", &harmony::Pr_b)
       .field("W", &harmony::W)
+      .field("W_k", &harmony::W_k)
       .field("R", &harmony::R)
       .field("objective_kmeans_dist", &harmony::objective_kmeans_dist)
       .field("objective_kmeans_entropy", &harmony::objective_kmeans_entropy)
-      .field("objective_kmeans_cross", &harmony::objective_kmeans_cross)    
+      .field("objective_kmeans_cross", &harmony::objective_kmeans_cross)
       .field("objective_harmony", &harmony::objective_harmony)
       .method("check_convergence", &harmony::check_convergence)
       .method("setup", &harmony::setup)
       .method("compute_objective", &harmony::compute_objective)
       .method("init_cluster_cpp", &harmony::init_cluster_cpp)
-      .method("cluster_cpp", &harmony::cluster_cpp)	  
+      .method("cluster_cpp", &harmony::cluster_cpp)
       .method("moe_correct_ridge_cpp", &harmony::moe_correct_ridge_cpp)
       ;
 }
