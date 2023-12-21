@@ -2,7 +2,7 @@
 #include "types.h"
 
 //[[Rcpp::export]]
-arma::mat kmeans_centers(const arma::mat& X, const int K) {
+MATTYPE kmeans_centers(const MATTYPE& X, const int K) {
   
   // Environment 
   Rcpp::Environment stats_env("package:stats");
@@ -100,8 +100,8 @@ MATTYPE scaleRows_dgc(const VECTYPE& x, const VECTYPE& p, const VECTYPE& i, int 
 
 
 // [[Rcpp::export]]
-arma::vec find_lambda_cpp(const float alpha, const arma::vec& cluster_E) {
-  arma::vec lambda_dym_vec(cluster_E.n_rows + 1, arma::fill::zeros);
+VECTYPE find_lambda_cpp(const float alpha, const VECTYPE& cluster_E) {
+  VECTYPE lambda_dym_vec(cluster_E.n_rows + 1, arma::fill::zeros);
   lambda_dym_vec.subvec(1, lambda_dym_vec.n_rows - 1) = cluster_E * alpha;
   return lambda_dym_vec;
 }

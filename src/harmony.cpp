@@ -19,8 +19,8 @@ harmony::harmony() :
 
 
 
-void harmony::setup(const MATTYPE& __Z, const arma::sp_mat& __Phi,
-                    const VECTYPE __sigma, const VECTYPE __theta, const VECTYPE __lambda, const float __alpha, const int __max_iter_kmeans,
+void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
+                    const RVEC __sigma, const RVEC __theta, const RVEC __lambda, const float __alpha, const int __max_iter_kmeans,
                     const float __epsilon_kmeans, const float __epsilon_harmony,
                     const int __K, const float __block_size,
                     const std::vector<int>& __B_vec, const bool __verbose) {
@@ -30,17 +30,17 @@ void harmony::setup(const MATTYPE& __Z, const arma::sp_mat& __Phi,
   B = __Phi.n_rows;
   d = __Z.n_rows;
   
-  Z_orig = __Z;
-  Z_cos = arma::normalise(__Z, 2, 0);
-  Z_corr = zeros(size(Z_orig));
+  Z_orig = conv_to<MATTYPE>::from(__Z);
+  Z_cos = arma::normalise(Z_orig, 2, 0);
+  Z_corr = MATTYPE(size(Z_orig));
 
   
-  Phi = __Phi;
+  Phi = conv_to<SPMAT>::from(__Phi);
   Phi_t = Phi.t();
   
   // Create index
   std::vector<unsigned>counters;
-  arma::vec sizes(sum(Phi, 1));
+  VECTYPE sizes(sum(Phi, 1));
   // std::cout << sizes << std::endl;
   for (unsigned i = 0; i < sizes.n_elem; i++) {
     arma::uvec a(int(sizes(i)));
@@ -48,8 +48,8 @@ void harmony::setup(const MATTYPE& __Z, const arma::sp_mat& __Phi,
     counters.push_back(0);
   }
 
-  arma::sp_mat::const_iterator it =     Phi.begin();
-  arma::sp_mat::const_iterator it_end = Phi.end();
+  SPMAT::const_iterator it =     Phi.begin();
+  SPMAT::const_iterator it_end = Phi.end();
   for(; it != it_end; ++it)
   {
     unsigned int row_idx = it.row();
@@ -68,10 +68,10 @@ void harmony::setup(const MATTYPE& __Z, const arma::sp_mat& __Phi,
   if (__lambda(0) == -1) {
     lambda_estimation = true;
   } else {
-    lambda = __lambda;
+    lambda = conv_to<VECTYPE>::from(__lambda);
   }
   B_vec = __B_vec;
-  sigma = __sigma;
+  sigma = conv_to<VECTYPE>::from(__sigma);
 
   if(__Z.n_cols < 6) {
     std::string error_message = "Refusing to run with less than 6 cells";
@@ -82,7 +82,7 @@ void harmony::setup(const MATTYPE& __Z, const arma::sp_mat& __Phi,
   } else {
     block_size = __block_size;
   } 
-  theta = __theta;
+  theta = conv_to<VECTYPE>::from(__theta);
   max_iter_kmeans = __max_iter_kmeans;
 
   verbose = __verbose;
@@ -103,7 +103,7 @@ void harmony::allocate_buffers() {
   O = E = zeros<MATTYPE>(K, B);
   
   // Hack: create matrix of ones by creating zeros and then add one!
-  arma::sp_mat intcpt = zeros<arma::sp_mat>(1, N);
+  SPMAT intcpt = zeros<SPMAT>(1, N);
   intcpt = intcpt+1;
   
   Phi_moe = join_cols(intcpt, Phi);
@@ -263,8 +263,8 @@ int harmony::update_R() {
   
   // Allocate new matrices
   MATTYPE R_randomized = R.cols(update_order);
-  arma::sp_mat Phi_randomized(Phi.cols(update_order));
-  arma::sp_mat Phi_t_randomized(Phi_randomized.t());
+  SPMAT Phi_randomized(Phi.cols(update_order));
+  SPMAT Phi_t_randomized(Phi_randomized.t());
   MATTYPE _scale_dist_randomized = _scale_dist.cols(update_order);
   
   for (unsigned i = 0; i < n_blocks; i++) {
@@ -301,8 +301,8 @@ int harmony::update_R() {
 
 void harmony::moe_correct_ridge_cpp() {
   
-  arma::sp_mat _Rk(N, N);
-  arma::sp_mat lambda_mat(B + 1, B + 1);
+  SPMAT _Rk(N, N);
+  SPMAT lambda_mat(B + 1, B + 1);
 
   if(!lambda_estimation) {
     // Set lambda if we have to
@@ -318,12 +318,12 @@ void harmony::moe_correct_ridge_cpp() {
       lambda_mat.diag() = find_lambda_cpp(alpha, E.row(k).t());
     }
     _Rk.diag() = R.row(k);
-    arma::sp_mat Phi_Rk = Phi_moe * _Rk;
+    SPMAT Phi_Rk = Phi_moe * _Rk;
     
-    arma::mat inv_cov(arma::inv(arma::mat(Phi_Rk * Phi_moe_t + lambda_mat)));
+    MATTYPE inv_cov(arma::inv(MATTYPE(Phi_Rk * Phi_moe_t + lambda_mat)));
 
     // Calculate R-scaled PCs once
-    arma::mat Z_tmp = Z_orig.each_row() % R.row(k);
+    MATTYPE Z_tmp = Z_orig.each_row() % R.row(k);
     
     // Generate the betas contribution of the intercept using the data
     // This erases whatever was written before in W
@@ -341,28 +341,28 @@ void harmony::moe_correct_ridge_cpp() {
   Z_cos = arma::normalise(Z_corr, 2, 0);
 }
 
-CUBETYPE harmony::moe_ridge_get_betas_cpp() {
-  CUBETYPE W_cube(B+1, d, K); // rows, cols, slices
+// CUBETYPE harmony::moe_ridge_get_betas_cpp() {
+//   CUBETYPE W_cube(B+1, d, K); // rows, cols, slices
 
-  arma::sp_mat _Rk(N, N);
-  arma::sp_mat lambda_mat(B + 1, B + 1);
+//   SPMAT _Rk(N, N);
+//   SPMAT lambda_mat(B + 1, B + 1);
 
-  if (!lambda_estimation) {
-    // Set lambda if we have to
-    lambda_mat.diag() = lambda;
-  }
+//   if (!lambda_estimation) {
+//     // Set lambda if we have to
+//     lambda_mat.diag() = lambda;
+//   }
 
-  for (unsigned k = 0; k < K; k++) {
-      _Rk.diag() = R.row(k);
-      if (lambda_estimation){
-        lambda_mat.diag() = find_lambda_cpp(alpha, E.row(k).t());
-      }
-      arma::sp_mat Phi_Rk = Phi_moe * _Rk;
-      W_cube.slice(k) = arma::inv(arma::mat(Phi_Rk * Phi_moe_t + lambda_mat)) * Phi_Rk * Z_orig.t();
-  }
+//   for (unsigned k = 0; k < K; k++) {
+//       _Rk.diag() = R.row(k);
+//       if (lambda_estimation){
+//         lambda_mat.diag() = find_lambda_cpp(alpha, E.row(k).t());
+//       }
+//       SPMAT Phi_Rk = Phi_moe * _Rk;
+//       W_cube.slice(k) = arma::inv(MATTYPE(Phi_Rk * Phi_moe_t + lambda_mat)) * Phi_Rk * Z_orig.t();
+//   }
 
-  return W_cube;
-}
+//   return W_cube;
+// }
 
 RCPP_MODULE(harmony_module) {
   class_<harmony>("harmony")
@@ -370,8 +370,8 @@ RCPP_MODULE(harmony_module) {
       .field("Z_corr", &harmony::Z_corr)
       .field("Z_cos", &harmony::Z_cos)
       .field("Z_orig", &harmony::Z_orig)
-      .field("Phi", &harmony::Phi)
-      .field("Phi_moe", &harmony::Phi_moe)
+      // .field("Phi", &harmony::Phi)
+      // .field("Phi_moe", &harmony::Phi_moe)
       .field("N", &harmony::N)
       .field("B", &harmony::B)
       .field("K", &harmony::K)
@@ -398,7 +398,7 @@ RCPP_MODULE(harmony_module) {
       .method("init_cluster_cpp", &harmony::init_cluster_cpp)
       .method("cluster_cpp", &harmony::cluster_cpp)	  
       .method("moe_correct_ridge_cpp", &harmony::moe_correct_ridge_cpp)
-      .method("moe_ridge_get_betas_cpp", &harmony::moe_ridge_get_betas_cpp)
+      // .method("moe_ridge_get_betas_cpp", &harmony::moe_ridge_get_betas_cpp)
       .field("B_vec", &harmony::B_vec)
       .field("alpha", &harmony::alpha)
       ;

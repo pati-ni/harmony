@@ -23,16 +23,16 @@ public:
   
   harmony();
   
-  void setup(const MATTYPE& __Z, const arma::sp_mat& __Phi,
-	     const VECTYPE __sigma, const VECTYPE __theta,
-	     const VECTYPE __lambda, const float __alpha, const int __max_iter_kmeans,
+  void setup(const RMAT& __Z, const RSPMAT& __Phi,
+	     const RVEC __sigma, const RVEC __theta,
+	     const RVEC __lambda, const float __alpha, const int __max_iter_kmeans,
 	     const float __epsilon_kmeans, const float __epsilon_harmony,
 	     const int __K, const float __block_size, 
 	     const vector<int>& __B_vec, const bool __verbose);
   
   /* METHODS */
   void moe_correct_ridge_cpp();
-  CUBETYPE moe_ridge_get_betas_cpp();
+  // CUBETYPE moe_ridge_get_betas_cpp();
   int cluster_cpp();
 
   void init_cluster_cpp();
@@ -44,7 +44,7 @@ public:
 
   /* FIELDS */
   MATTYPE R, Z_orig, Z_corr, Z_cos, Y;
-  arma::sp_mat Phi, Phi_moe, Phi_moe_t, Phi_t, Rk;
+  SPMAT Phi, Phi_moe, Phi_moe_t, Phi_t, Rk;
   VECTYPE Pr_b, theta, N_b, sigma, lambda;
 
   // auxilary data structures
