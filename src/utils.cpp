@@ -4,17 +4,12 @@
 //[[Rcpp::export]]
 MATTYPE kmeans_centers(const MATTYPE& X, const int K) {
   
-  // Environment 
-  Rcpp::Environment stats_env("package:stats");
-  // Cast function as callable from C++
-  Rcpp::Function kmeans = stats_env["kmeans"];
-  // Call the function and receive its list output
-  Rcpp::List res = kmeans(Rcpp::_["x"] = X.t(),
-                          Rcpp::_["centers"] = K,
-                          Rcpp::_["iter.max"] = 25,
-                          Rcpp::_["nstart"] = 10
-                          );
-  return res["centers"];
+  MATTYPE Y;
+  if (!arma::kmeans(Y, X, K, arma::static_spread, 10, true)) {
+    Rcpp::stop("Clustering failed");
+  }
+  return Y.t();
+  
 }
 
 
