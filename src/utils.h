@@ -2,7 +2,7 @@
 #include "types.h"
 #include <RcppArmadillo.h>
 
-MATTYPE kmeans_centers(const MATTYPE& X, const int K);
+MATTYPE kmeans_centers(const MATTYPE& X, const unsigned int K, bool verbose);
 
 MATTYPE safe_entropy(const MATTYPE& X);
 

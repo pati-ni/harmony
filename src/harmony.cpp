@@ -115,9 +115,9 @@ void harmony::allocate_buffers() {
 
 
 void harmony::init_cluster_cpp() {
-
-  Y = kmeans_centers(Z_cos, K).t();
   
+  Y = kmeans_centers(Z_cos, K, verbose);
+
   // Cosine normalization of data centrods
   Y = arma::normalise(Y, 2, 0);
 
