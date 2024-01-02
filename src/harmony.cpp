@@ -31,8 +31,7 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
   d = __Z.n_rows;
   
   Z_orig = conv_to<MATTYPE>::from(__Z);
-  Z_cos = arma::normalise(Z_orig, 2, 0);
-  Z_corr = MATTYPE(size(Z_orig));
+  Z_corr = arma::normalise(Z_orig, 2, 0);
 
   
   Phi = conv_to<SPMAT>::from(__Phi);
@@ -116,7 +115,7 @@ void harmony::allocate_buffers() {
 
 void harmony::init_cluster_cpp() {
   
-  Y = kmeans_centers(Z_cos, K, verbose);
+  Y = kmeans_centers(Z_corr, K, verbose);
 
   // Cosine normalization of data centrods
   Y = arma::normalise(Y, 2, 0);
@@ -124,7 +123,7 @@ void harmony::init_cluster_cpp() {
   // (2) ASSIGN CLUSTER PROBABILITIES
   // using a nice property of cosine distance,
   // compute squared distance directly with cross product
-  dist_mat = 2 * (1 - Y.t() * Z_cos);
+  dist_mat = 2 * (1 - Y.t() * Z_corr);
   
   R = -dist_mat;
   R.each_col() /= sigma;
@@ -139,7 +138,7 @@ void harmony::init_cluster_cpp() {
   compute_objective();
   objective_harmony.push_back(objective_kmeans.back());
   
-  dist_mat = 2 * (1 - Y.t() * Z_cos); // Z_cos was changed
+  dist_mat = 2 * (1 - Y.t() * Z_corr);
 
   ran_init = true;
   
@@ -197,8 +196,10 @@ int harmony::cluster_cpp() {
   int err_status = 0;
   Progress p(max_iter_kmeans, verbose);
   unsigned iter;
-  
-  // Z_cos has changed
+
+
+  Z_corr = arma::normalise(Z_corr, 2, 0);
+  // Z_corr has changed
   // R has assumed to not change
   // so update Y to match new integrated data  
   for (iter = 0; iter < max_iter_kmeans; iter++) {
@@ -208,9 +209,9 @@ int harmony::cluster_cpp() {
 	  return(-1);
     
       // STEP 1: Update Y (cluster centroids)
-      Y = arma::normalise(Z_cos * R.t(), 2, 0);
+      Y = arma::normalise(Z_corr * R.t(), 2, 0);
 
-      dist_mat = 2 * (1 - Y.t() * Z_cos); // Y was changed
+      dist_mat = 2 * (1 - Y.t() * Z_corr); // Y was changed
 
         
       // STEP 3: Update R    
@@ -338,7 +339,7 @@ void harmony::moe_correct_ridge_cpp() {
     W.row(0).zeros(); // do not remove the intercept
     Z_corr -= W.t() * Phi_Rk;
   }
-  Z_cos = arma::normalise(Z_corr, 2, 0);
+
 }
 
 // CUBETYPE harmony::moe_ridge_get_betas_cpp() {
@@ -368,7 +369,6 @@ RCPP_MODULE(harmony_module) {
   class_<harmony>("harmony")
       .constructor()
       .field("Z_corr", &harmony::Z_corr)
-      .field("Z_cos", &harmony::Z_cos)
       .field("Z_orig", &harmony::Z_orig)
       // .field("Phi", &harmony::Phi)
       // .field("Phi_moe", &harmony::Phi_moe)

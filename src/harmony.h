@@ -43,7 +43,7 @@ public:
   void setY(const MATTYPE& Z);
 
   /* FIELDS */
-  MATTYPE R, Z_orig, Z_corr, Z_cos, Y;
+  MATTYPE R, Z_orig, Z_corr, Y;
   SPMAT Phi, Phi_moe, Phi_moe_t, Phi_t, Rk;
   VECTYPE Pr_b, theta, N_b, sigma, lambda;
 
