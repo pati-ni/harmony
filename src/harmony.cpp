@@ -97,7 +97,6 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
 
 void harmony::allocate_buffers() {
   
-  _scale_dist = zeros<MATTYPE>(K, N);
   dist_mat = zeros<MATTYPE>(K, N);
   O = E = zeros<MATTYPE>(K, B);
   
@@ -130,18 +129,14 @@ void harmony::init_cluster_cpp() {
   R = exp(R);
   R.each_row() /= sum(R, 0);
   
-  
   // (3) BATCH DIVERSITY STATISTICS
   E = sum(R, 1) * Pr_b.t();
   O = R * Phi_t;
   
   compute_objective();
   objective_harmony.push_back(objective_kmeans.back());
-  
-  dist_mat = 2 * (1 - Y.t() * Z_corr);
 
   ran_init = true;
-  
 }
 
 void harmony::compute_objective() {
@@ -212,8 +207,7 @@ int harmony::cluster_cpp() {
       Y = arma::normalise(Z_corr * R.t(), 2, 0);
 
       dist_mat = 2 * (1 - Y.t() * Z_corr); // Y was changed
-
-        
+              
       // STEP 3: Update R    
       err_status = update_R();
       if (err_status != 0) {
@@ -251,23 +245,22 @@ int harmony::update_R() {
   
   // Inverse index
   uvec reverse_index(N, arma::fill::zeros);
-  reverse_index.rows(update_order) = indices;
-  
-  _scale_dist = -dist_mat; // K x N
-  _scale_dist.each_col() /= sigma; // NEW: vector sigma
-  _scale_dist = exp(_scale_dist);
-  _scale_dist = arma::normalise(_scale_dist, 1, 0);
+  reverse_index.rows(update_order) = indices;    
 
   // GENERAL CASE: online updates, in blocks of size (N * block_size)
   unsigned n_blocks = (int)(my_ceil(1.0 / block_size));
   unsigned cells_per_block = unsigned(N * block_size);
   
-  // Allocate new matrices
-  MATTYPE R_randomized = R.cols(update_order);
+  // Reference matrices to avoid allocating memory
+  MATTYPE& R_randomized = R;
+  R_randomized = R_randomized.cols(update_order);
+  
+  MATTYPE& dist_mat_randomized = dist_mat;   
+  dist_mat_randomized = dist_mat_randomized.cols(update_order);
+  
   SPMAT Phi_randomized(Phi.cols(update_order));
   SPMAT Phi_t_randomized(Phi_randomized.t());
-  MATTYPE _scale_dist_randomized = _scale_dist.cols(update_order);
-  
+
   for (unsigned i = 0; i < n_blocks; i++) {
     unsigned idx_min = i*cells_per_block;
     unsigned idx_max = ((i+1) * cells_per_block) - 1; // - 1 because of submat
@@ -280,22 +273,31 @@ int harmony::update_R() {
     auto Rcells = R_randomized.submat(0, idx_min, R_randomized.n_rows - 1, idx_max);
     auto Phicells = Phi_randomized.submat(0, idx_min, Phi_randomized.n_rows - 1, idx_max);
     auto Phi_tcells = Phi_t_randomized.submat(idx_min, 0, idx_max, Phi_t_randomized.n_cols - 1);
-    auto _scale_distcells = _scale_dist_randomized.submat(0, idx_min, _scale_dist_randomized.n_rows - 1, idx_max);
+    auto dist_matcells = dist_mat_randomized.submat(0, idx_min, dist_mat_randomized.n_rows - 1, idx_max);
 
     // Step 1: remove cells
     E -= sum(Rcells, 1) * Pr_b.t();
     O -= Rcells * Phi_tcells;
 
     // Step 2: recompute R for removed cells
-    Rcells = _scale_distcells;
+    Rcells = -dist_matcells;
+    Rcells.each_col() /= sigma; // NEW: vector sigma
+    Rcells = exp(Rcells);
+    Rcells = arma::normalise(Rcells, 1, 0);
     Rcells = Rcells % (harmony_pow(E/(O + E), theta) * Phicells);
-    Rcells = normalise(Rcells, 1, 0); // L1 norm columns
+    Rcells = arma::normalise(Rcells, 1, 0); // L1 norm columns
+
 
     // Step 3: put cells back 
     E += sum(Rcells, 1) * Pr_b.t();
     O += Rcells * Phi_tcells;
   }
-  this->R = R_randomized.cols(reverse_index);
+  
+  // Unshuffle R (this updates also the class objects since this is a
+  // reference to these class attributes)
+  R_randomized = R_randomized.cols(reverse_index);
+  dist_mat = dist_mat.cols(reverse_index);  
+  
   return 0;
 }
 
