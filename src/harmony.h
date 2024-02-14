@@ -39,7 +39,7 @@ public:
 	     const RVEC __lambda, const float __alpha, const int __max_iter_kmeans,
 	     const float __epsilon_kmeans, const float __epsilon_harmony,
 	     const int __K, const float __block_size, 
-	     const vector<int>& __B_vec, const bool __verbose);
+	     const vector<int>& __B_vec, float __batch_proportion_cutoff, const bool __verbose);
   
   /* METHODS */
   void moe_correct_ridge_cpp();
@@ -64,7 +64,7 @@ public:
   std::vector<arma::uvec>index;
   arma::uvec batch_sizes, new_index, original_index, batch_indptr;
   
-  float block_size, epsilon_kmeans, epsilon_harmony, alpha;
+  float block_size, epsilon_kmeans, epsilon_harmony, alpha, batch_proportion_cutoff;
   unsigned int N, K, B, d, max_iter_kmeans, window_size;
 
   // buffers

@@ -144,7 +144,7 @@ RunHarmony.default <- function(
         block.size <- .options$block.size
         max.iter.cluster <- .options$max.iter.cluster
         epsilon.cluster <- .options$epsilon.cluster   
-        
+        batch.prop.cutoff <- .options$batch.prop.cutoff
         
 
         ## TODO: check for 
@@ -262,8 +262,7 @@ RunHarmony.default <- function(
         harmonyObj$setup(
                        data_mat, phi, sigma, theta, lambda_vec, alpha,
                        max.iter.cluster, epsilon.cluster,
-                       epsilon.harmony, nclust, block.size,
-                       B_vec, verbose
+                       epsilon.harmony, nclust, block.size, B_vec, batch.prop.cutoff, verbose
                    )
 
         

@@ -30,7 +30,7 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
                     const RVEC __sigma, const RVEC __theta, const RVEC __lambda, const float __alpha, const int __max_iter_kmeans,
                     const float __epsilon_kmeans, const float __epsilon_harmony,
                     const int __K, const float __block_size,
-                    const std::vector<int>& __B_vec, const bool __verbose) {
+                    const std::vector<int>& __B_vec, float __batch_proportion_cutoff, const bool __verbose) {
     
   // Algorithm constants
   N = __Z.n_cols;
@@ -143,6 +143,7 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
   ran_setup = true;
 
   alpha = __alpha;
+  batch_proportion_cutoff = __batch_proportion_cutoff;
   
   
 }
@@ -383,10 +384,10 @@ void harmony::moe_correct_ridge_cpp() {
     std::vector<unsigned> keep;
     unsigned keep_cols_size = 0;
     for (unsigned b = 0; b < B; b++) {
-      if ((as_scalar(avg_R.row(b)) > 1e-5)) {
+      float batch_representation  = as_scalar(avg_R.row(b));
+      if (batch_representation > batch_proportion_cutoff) {
 	keep.push_back(b);
 	keep_cols_size += this->index[b].n_rows;
-
       }
     }
     arma::uvec keep_batch = arma::conv_to<arma::uvec>::from(keep);

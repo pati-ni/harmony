@@ -15,6 +15,12 @@
 #' @param epsilon.harmony Convergence tolerance for Harmony. Set to -Inf to
 #'     never stop early. When `epsilon.harmony` is set to not NULL, then
 #'     user-supplied values of `early_stop` is ignored.
+#' @param batch.prop.cutoff During the integration step, if a batch
+#'     has less of the specified proportion in a harmony cluster it
+#'     will be excluded from the integration step. For example,
+#'     batch.prop.cutoff=0.01 and a batch has less than 1/100 of its
+#'     cells soft-assigned to a cluster this batch won't participating
+#'     in the correction step for the particular batch.
 #' @returns Return a list for `.options` argument of `RunHarmony`
 #' @export
 #' @examples
@@ -30,7 +36,8 @@ harmony_options <- function(
   block.size = 0.05,
   max.iter.cluster = 20,
   epsilon.cluster = 1e-3,
-  epsilon.harmony = 1e-2) {
+  epsilon.harmony = 1e-2,
+  batch.prop.cutoff = 1e-5) {
     
     block.size <- validate_block.size(block.size)
     
@@ -40,7 +47,8 @@ harmony_options <- function(
         block.size = block.size,
         max.iter.cluster = max.iter.cluster,
         epsilon.cluster = epsilon.cluster,
-        epsilon.harmony = epsilon.harmony
+        epsilon.harmony = epsilon.harmony,
+        batch.prop.cutoff = batch.prop.cutoff
     )
     out <- structure(out, class = "harmony_options")
     return(out)
