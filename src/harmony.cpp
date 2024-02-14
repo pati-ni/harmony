@@ -325,35 +325,46 @@ int harmony::update_R() {
       // extra cells.
       idx_max = N - 1;
     }
-
+    
+    Timer *t_r = new Timer(timers["random_subset"]);
     auto Rcells = R_randomized.submat(0, idx_min, R_randomized.n_rows - 1, idx_max);
     auto Phicells = Phi_randomized.submat(0, idx_min, Phi_randomized.n_rows - 1, idx_max);
     auto Phi_tcells = Phi_t_randomized.submat(idx_min, 0, idx_max, Phi_t_randomized.n_cols - 1);
     auto dist_matcells = dist_mat_randomized.submat(0, idx_min, dist_mat_randomized.n_rows - 1, idx_max);
-
-    // Step 1: remove cells
-    E -= sum(Rcells, 1) * Pr_b.t();
-    O -= Rcells * Phi_tcells;
-
+    delete t_r;
+    
+    {
+      Timer t(timers["EO_update"]);
+      // Step 1: remove cells
+      E -= sum(Rcells, 1) * Pr_b.t();
+      O -= Rcells * Phi_tcells;
+    }
     // Step 2: recompute R for removed cells
-    Rcells = -dist_matcells;
-    Rcells.each_col() /= sigma; // NEW: vector sigma
-    Rcells = exp(Rcells);
-    Rcells = arma::normalise(Rcells, 1, 0);
-    Rcells = Rcells % (harmony_pow(E/(O + E), theta) * Phicells);
-    Rcells = arma::normalise(Rcells, 1, 0); // L1 norm columns
+    {
+      Timer t(timers["Rcells_update"]);
+      Rcells = -dist_matcells;
+      Rcells.each_col() /= sigma; // NEW: vector sigma
+      Rcells = exp(Rcells);
+      Rcells = arma::normalise(Rcells, 1, 0);
+      Rcells = Rcells % (harmony_pow(E / (O + E), theta) * Phicells);
+      Rcells = arma::normalise(Rcells, 1, 0); // L1 norm columns
+    }
 
-
-    // Step 3: put cells back 
-    E += sum(Rcells, 1) * Pr_b.t();
-    O += Rcells * Phi_tcells;
+    {
+      Timer t(timers["EO_update"]);
+      // Step 3: put cells back 
+      E += sum(Rcells, 1) * Pr_b.t();
+      O += Rcells * Phi_tcells;
+    }
   }
-  
-  // Unshuffle R (this updates also the class objects since this is a
-  // reference to these class attributes)
-  R_randomized = R_randomized.cols(reverse_index);
-  dist_mat = dist_mat.cols(reverse_index);  
-  
+
+  {
+      Timer t_random(timers["randomize"]);
+      // Unshuffle R (this updates also the class objects since this is a
+      // reference to these class attributes)
+      R_randomized = R_randomized.cols(reverse_index);
+      dist_mat = dist_mat.cols(reverse_index);
+  }
   return 0;
 }
 
