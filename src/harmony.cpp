@@ -370,44 +370,187 @@ int harmony::update_R() {
 
 
 void harmony::moe_correct_ridge_cpp() {
-  
-  SPMAT _Rk(N, N);
-  SPMAT lambda_mat(B + 1, B + 1);
 
-  if(!lambda_estimation) {
-    // Set lambda if we have to
-    lambda_mat.diag() = lambda;
-  }
   Z_corr = Z_orig;
   Progress p(K, verbose);
+
+  VECTYPE sizes(sum(Phi, 1));
+
   for (unsigned k = 0; k < K; k++) {
+    VECTYPE avg_R(O.row(k).t()/sizes);
+    bool subset_data = false;
+    // Determine which batches do not belong to the cluster
+    std::vector<unsigned> keep;
+    unsigned keep_cols_size = 0;
+    for (unsigned b = 0; b < B; b++) {
+      if ((as_scalar(avg_R.row(b)) > 1e-5)) {
+	keep.push_back(b);
+	keep_cols_size += this->index[b].n_rows;
+
+      }
+    }
+    arma::uvec keep_batch = arma::conv_to<arma::uvec>::from(keep);
+    MATTYPE *_Z_corr, *_Z_tmp;
+    SPMAT *_Phi_moe, *_Phi_moe_t, *_lambda_mat, *__Rk;
+    std::vector<arma::uvec>* _index;
+    arma::uvec keep_cols(keep_cols_size);
+    // Drop unused batches
+    if (keep.size() == B) {
+      std::cout << "Normal pass of the data " << std::endl;
+      // Avoid expensive copy, in this case we do not delete the
+      // pointer as it is handled by the object lifetime
+      _Z_corr = &(this->Z_corr);
+      _Z_tmp = new MATTYPE(Z_orig);
+      _Phi_moe = &(this->Phi_moe);
+      _Phi_moe_t = &(this->Phi_moe_t);
+      __Rk = new SPMAT(_Z_corr->n_cols, _Z_corr->n_cols);
+      __Rk->diag() = this->R.row(k);
+      _index = &(this->index);
+      _lambda_mat = new SPMAT(B + 1, B + 1);
+      
+      if (!lambda_estimation) {
+	// Set lambda
+	_lambda_mat->diag() = lambda;
+      } else {
+	_lambda_mat->diag() = find_lambda_cpp(alpha, E.row(k).t());
+      }
+    } else {
+      subset_data = true;
+      std::cout << "Filter " << B - keep.size() << " out of " << B << " batches" << std::endl;
+      Timer t(timers["subset_overhead"]);
+
+      arma::uvec indptr(keep.size() + 1 + 1); // +1 for the intercept, +1 for the indptr
+      arma::uvec rowind((2 * keep_cols_size));
+      _index = new std::vector<arma::uvec>();
+      indptr(0) = 0;
+      indptr(1) = keep_cols_size; // Intercept  fill everything with ones
+
+      // row indices when we have one covariate is a matter of concatenating all indices twice
+      arma::uvec new_index = linspace<uvec>(0, keep_cols_size-1, keep_cols_size);
+      rowind = join_cols(new_index, new_index);
+
+      unsigned offset = 0;
+      for (unsigned i = 0; i < keep.size(); i++) {
+	const auto& batch_ind = this->index[keep[i]];
+	keep_cols.subvec(offset, offset + batch_ind.n_rows - 1) = batch_ind;
+	indptr(i+2) = indptr(i+1) + batch_ind.n_rows;
+	_index->push_back(rowind.subvec(indptr(i+1), indptr(i+2)-1));
+	offset += batch_ind.n_rows;
+      }
+      for (unsigned i = 1; i < keep_cols.n_rows; i++) {
+	if (!(keep_cols(i-1) < keep_cols(i))) {
+	  Rcpp::stop("Matrix needs ordering");
+	}
+      }
+
+      _Z_corr = new MATTYPE();
+      (*_Z_corr) = this->Z_corr.cols(keep_cols);
+      _Z_tmp = new MATTYPE(this->Z_orig.cols(keep_cols));
+
+      _Phi_moe_t = new SPMAT(rowind,
+			     indptr,
+			     VECTYPE(rowind.n_rows, arma::fill::ones),
+			     keep_cols_size,
+			     keep.size() + 1);
+
+      _Phi_moe = new SPMAT(_Phi_moe_t->t());
+
+      // Generate new Rs
+      __Rk = new SPMAT(_Z_corr->n_cols, _Z_corr->n_cols);
+      VECTYPE _R(this->R.row(k).as_col());
+
+      __Rk->diag() = _R.rows(keep_cols);
+      _lambda_mat = new SPMAT(keep.size() + 1, keep.size() + 1);
+      if (!lambda_estimation) {
+	// Set lambda
+	VECTYPE _ltmp(keep_batch.n_rows + 1);
+	_ltmp(0) = 0;
+	_ltmp.subvec(1, keep_batch.n_rows) = lambda.rows(keep_batch+1);
+	_lambda_mat->diag() = _ltmp.as_row();
+      } else {
+
+	VECTYPE Esub = E.row(k).as_col();
+	Esub = Esub.rows(keep_batch);
+	_lambda_mat->diag() = find_lambda_cpp(alpha, Esub).as_row();
+      }
+    }
+
+    MATTYPE& Z_corr= (*_Z_corr);
+    SPMAT& Phi_moe = (*_Phi_moe);
+    SPMAT& Phi_moe_t = (*_Phi_moe_t);
+    SPMAT& lambda_mat = (*_lambda_mat);
+    SPMAT& _Rk = (*__Rk);
+    MATTYPE& Z_tmp = (*_Z_tmp);
+    std::vector<arma::uvec>& index = *_index;
+
+    Timer t(timers["correct_ridge_loop"]);
     p.increment();
     if (Progress::check_abort())
       return;
-    if (lambda_estimation) {
-      lambda_mat.diag() = find_lambda_cpp(alpha, E.row(k).t());
-    }
-    _Rk.diag() = R.row(k);
+
     SPMAT Phi_Rk = Phi_moe * _Rk;
-    
-    MATTYPE inv_cov(arma::inv(MATTYPE(Phi_Rk * Phi_moe_t + lambda_mat)));
+
+    MATTYPE inv_cov, Phi_cov;
+    {
+      Timer t(timers["Phi_cov"]);
+      Phi_cov = Phi_Rk * Phi_moe_t + lambda_mat;
+    }
+
+    {
+      Timer t(timers["arma_inv"]);
+      inv_cov = arma::inv(Phi_cov);
+    }
 
     // Calculate R-scaled PCs once
-    MATTYPE Z_tmp = Z_orig.each_row() % R.row(k);
-    
+    {
+      Timer t(timers["Z_tmp"]);
+      Z_tmp = Z_tmp.each_row() % VECTYPE(_Rk.diag()).as_row();
+    }
+
     // Generate the betas contribution of the intercept using the data
     // This erases whatever was written before in W
-    W = inv_cov.unsafe_col(0) * sum(Z_tmp, 1).t();
+    {
+      Timer t(timers["Z_intercept"]);
+      W = inv_cov.unsafe_col(0) * sum(Z_tmp, 1).t();
+    }
 
     // Calculate betas by calculating each batch contribution
-    for(unsigned b=0; b < B; b++) {
-      // inv_conv is B+1xB+1 whereas index is B long
-      W += inv_cov.unsafe_col(b+1) * sum(Z_tmp.cols(index[b]), 1).t();
+    {
+      Timer t(timers["batch_exprod"]);
+      for (unsigned b=0; b < Phi_moe.n_rows - 1; b++) {
+	// inv_conv is B+1xB+1 whereas index is B long
+	W += inv_cov.unsafe_col(b+1) * sum(Z_tmp.cols(index[b]), 1).t();
+      }
     }
-    
+    // Y.col(k) = W.row(0).t();
     W.row(0).zeros(); // do not remove the intercept
-    Z_corr -= W.t() * Phi_Rk;
+
+    {
+      Timer t(timers["update_Zcorr"]);
+      Z_corr -= W.t() * Phi_Rk;
+    }
+
+    if (subset_data) {
+      Timer t(timers["subset_overhead"]);
+      // Update original Zcorr columns
+      this->Z_corr.cols(keep_cols) = Z_corr;
+      // We don't need anything else
+      delete _Z_corr;
+      delete _Phi_moe;
+      delete _Phi_moe_t;
+      delete _index;
+    }
+
+    delete _lambda_mat;
+    delete __Rk;
+    delete _Z_tmp;
+
   }
+
+  // print_timers();
+
+
+
 
 }
 
