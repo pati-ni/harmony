@@ -36,20 +36,66 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
   N = __Z.n_cols;
   B = __Phi.n_rows;
   d = __Z.n_rows;
-  
-  Z_orig = conv_to<MATTYPE>::from(__Z);
-  Z_corr = arma::normalise(Z_orig, 2, 0);
 
   
-  Phi = conv_to<SPMAT>::from(__Phi);
-  Phi_t = Phi.t();
+  
+  {
+    Timer t(timers["sorting_elems"]);
+    
+    // TODO(Nikos) This works with one covariate it will have
+    // undefined behavior with several
+    
+    orig_index.reserve(N);
+    RSPMAT::const_iterator it =     __Phi.begin();
+    RSPMAT::const_iterator it_end = __Phi.end();
+    batch_indptr = arma::zeros<uvec>(B+1);
+    for(unsigned i=0; it != it_end; ++it, i++)
+    {
+      unsigned int row_idx = it.row(); // Batch
+      unsigned int col_idx = it.col(); // Cell
+      batch_indptr(row_idx+1) += 1; // i+1, indptr
+      orig_index.push_back({row_idx, col_idx});
+      
+      if (col_idx != i) {
+	Rcpp::stop("Misalignment during sorting");
+      }
+    }
+    // Update batch_indptr
+    for (unsigned i=1; i < B+1;++i) {
+      batch_indptr(i) += batch_indptr(i-1);
+    }
+    
+    std::sort(orig_index.begin(), orig_index.end(), CellEntryCompare);
+    new_index = arma::uvec(orig_index.size());
+    unsigned i = 0;
+    for (const auto& s : orig_index) {
+      new_index(i++) = s.cell_number;
+    }
+    
+    uvec indices = linspace<uvec>(0, N - 1, N);
+    // Inverse index
+    original_index = arma::uvec(size(indices));
+    original_index.rows(new_index) = indices;
+    Phi_t = SPMAT(indices,
+		  batch_indptr,
+		  VECTYPE(indices.n_rows, arma::fill::ones),
+		  N,
+		  B);
+  }
+  
+  
+  Z_orig = conv_to<MATTYPE>::from(__Z.cols(new_index));
+  Z_corr = arma::normalise(Z_orig, 2, 0);
+  
+  // Phi = conv_to<SPMAT>::from(__Phi);
+  Phi = Phi_t.t();
   
   // Create index
   std::vector<unsigned>counters;
-  VECTYPE sizes(sum(Phi, 1));
-  // std::cout << sizes << std::endl;
-  for (unsigned i = 0; i < sizes.n_elem; i++) {
-    arma::uvec a(int(sizes(i)));
+  
+  batch_sizes = conv_to<arma::uvec>::from(VECTYPE(sum(Phi, 1)));
+  for (unsigned i = 0; i < batch_sizes.n_elem; i++) {
+    arma::uvec a(batch_sizes(i));
     index.push_back(a);
     counters.push_back(0);
   }
@@ -183,6 +229,9 @@ bool harmony::check_convergence(int type) {
       obj_old = objective_harmony[objective_harmony.size() - 2];
       obj_new = objective_harmony[objective_harmony.size() - 1];
       if ((obj_old - obj_new) / abs(obj_old) < epsilon_harmony) {
+	// Unshuffle Z_corr
+	Z_corr = Z_corr.cols(original_index);
+	Z_orig = Z_orig.cols(original_index);
         return(true);              
       } else {
         return(false);              
