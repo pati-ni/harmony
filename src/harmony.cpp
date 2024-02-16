@@ -522,7 +522,7 @@ void harmony::moe_correct_ridge_cpp() {
 	W += inv_cov.unsafe_col(b+1) * sum(Z_tmp.cols(index[b]), 1).t();
       }
     }
-    // Y.col(k) = W.row(0).t();
+    Y.col(k) = W.row(0).t(); // update centroids
     W.row(0).zeros(); // do not remove the intercept
 
     {
@@ -547,7 +547,25 @@ void harmony::moe_correct_ridge_cpp() {
 
   }
 
-  // print_timers();
+
+  Y = arma::normalise(Y, 2, 0);
+  Z_corr = arma::normalise(Z_corr, 2, 0);
+  dist_mat = 2 * (1 - Y.t() * Z_corr);
+  
+  R = -dist_mat;
+  R.each_col() /= sigma;
+  R = exp(R);
+  R.each_row() /= sum(R, 0);
+
+
+  // std::cout << E << std::endl;
+  
+  E = sum(R, 1) * Pr_b.t();
+  O = R * Phi_t;
+  
+
+  
+  print_timers();
 
 
 
