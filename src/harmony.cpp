@@ -231,8 +231,7 @@ bool harmony::check_convergence(int type) {
       obj_new = objective_harmony[objective_harmony.size() - 1];
       if ((obj_old - obj_new) / abs(obj_old) < epsilon_harmony) {
 	// Unshuffle Z_corr
-	Z_corr = Z_corr.cols(original_index);
-	Z_orig = Z_orig.cols(original_index);
+	
         return(true);              
       } else {
         return(false);              
@@ -261,9 +260,9 @@ int harmony::cluster_cpp() {
 	  return(-1);
     
       // STEP 1: Update Y (cluster centroids)
-      Y = arma::normalise(Z_corr * R.t(), 2, 0);
+      // Y = arma::normalise(Z_corr * R.t(), 2, 0);
 
-      dist_mat = 2 * (1 - Y.t() * Z_corr); // Y was changed
+      // dist_mat = 2 * (1 - Y.t() * Z_corr); // Y was changed
               
       // STEP 3: Update R    
       err_status = update_R();
@@ -578,11 +577,20 @@ void harmony::moe_correct_ridge_cpp() {
 //   return W_cube;
 // }
 
+RMAT harmony::getZcorr() {
+  return conv_to<RMAT>::from(Z_corr.cols(original_index));
+}
+
+RMAT harmony::getZorig() {
+  return conv_to<RMAT>::from(Z_orig.cols(original_index));  
+}
+
+
 RCPP_MODULE(harmony_module) {
   class_<harmony>("harmony")
       .constructor()
-      .field("Z_corr", &harmony::Z_corr)
-      .field("Z_orig", &harmony::Z_orig)
+      // .field("Z_corr", &harmony::Z_corr)
+      // .field("Z_orig", &harmony::Z_orig)
       // .field("Phi", &harmony::Phi)
       // .field("Phi_moe", &harmony::Phi_moe)
       .field("N", &harmony::N)
@@ -605,6 +613,8 @@ RCPP_MODULE(harmony_module) {
       .field("objective_kmeans_cross", &harmony::objective_kmeans_cross)    
       .field("objective_harmony", &harmony::objective_harmony)
       .field("max_iter_kmeans", &harmony::max_iter_kmeans)
+    .method("getZcorr", &harmony::getZcorr)
+    .method("getZorig", &harmony::getZorig)
       .method("check_convergence", &harmony::check_convergence)
       .method("setup", &harmony::setup)
       .method("compute_objective", &harmony::compute_objective)

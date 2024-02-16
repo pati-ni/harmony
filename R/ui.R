@@ -280,7 +280,7 @@ RunHarmony.default <- function(
         if (return_object) {
             return(harmonyObj)
         } else {
-            res <- as.matrix(harmonyObj$Z_corr)
+            res <- harmonyObj$getZcorr()
             row.names(res) <- row.names(data_mat)
             colnames(res) <- colnames(data_mat)
             return(t(res))

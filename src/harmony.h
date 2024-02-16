@@ -52,6 +52,9 @@ public:
   int update_R();
   bool check_convergence(int type);
   void setY(const MATTYPE& Z);
+  RMAT getZcorr();
+  RMAT getZorig();
+  
 
   /* FIELDS */
   MATTYPE R, Z_orig, Z_corr, Y;
