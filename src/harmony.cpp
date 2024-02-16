@@ -205,6 +205,11 @@ void harmony::compute_objective() {
   objective_kmeans_dist.push_back(kmeans_error * norm_const);
   objective_kmeans_entropy.push_back(_entropy * norm_const);
   objective_kmeans_cross.push_back(_cross_entropy * norm_const);
+  std::cout << "Objective: \n\t Harmony:\t" << objective_kmeans.back() << std::endl;
+  std::cout << "\t kmeans:\t" << objective_kmeans_dist.back() << std::endl;
+  std::cout << "\t soft-k:\t" << objective_kmeans_entropy.back() << std::endl;
+  std::cout << "\t divers:\t" << objective_kmeans_cross.back() << std::endl;
+
 }
 
 
@@ -220,7 +225,7 @@ bool harmony::check_convergence(int type) {
         obj_old += objective_kmeans[objective_kmeans.size() - 2 - i];
         obj_new += objective_kmeans[objective_kmeans.size() - 1 - i];
       }
-      if ((obj_old - obj_new) / abs(obj_old) < epsilon_kmeans) {
+      if (abs(obj_old - obj_new) / abs(obj_old) < epsilon_kmeans) {
         return(true); 
       } else {
         return(false);
