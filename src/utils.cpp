@@ -71,6 +71,16 @@ MATTYPE kmeans_centers(const MATTYPE& X, const unsigned int K, bool verbose) {
 }
 
 
+float my_accu(const MATTYPE& X) {
+  auto* X_mem = X.memptr();
+  float sum=0;
+  long len =X.n_rows * X.n_cols;
+  for(long i = 0; i < len; ++i){
+    sum+=X_mem[i];
+  }
+  return sum;
+}
+
 MATTYPE safe_entropy(const MATTYPE& X) {
   return X % trunc_log(X);
   // A.elem(find_nonfinite(A)).zeros();

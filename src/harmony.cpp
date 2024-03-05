@@ -195,10 +195,10 @@ void harmony::init_cluster_cpp() {
 
 void harmony::compute_objective() {
   const float norm_const = 2000/((float)N);
-  float kmeans_error = as_scalar(accu(R % dist_mat));  
-  float _entropy = as_scalar(accu(safe_entropy(R).each_col() % sigma)); // NEW: vector sigma
+  float kmeans_error = as_scalar(my_accu(R % dist_mat));  
+  float _entropy = as_scalar(my_accu(safe_entropy(R).each_col() % sigma)); // NEW: vector sigma
   float _cross_entropy = as_scalar(
-      accu((R.each_col() % sigma) % ((arma::repmat(theta.t(), K, 1) % log((O + E) / E)) * Phi)));
+      my_accu((R.each_col() % sigma) % ((arma::repmat(theta.t(), K, 1) % log((O + E) / E)) * Phi)));
 
   // Push back the data
   objective_kmeans.push_back((kmeans_error + _entropy + _cross_entropy) * norm_const);

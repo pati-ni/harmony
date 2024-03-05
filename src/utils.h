@@ -12,6 +12,6 @@ VECTYPE calculate_norm(const MATTYPE& M);
 
 
 int my_ceil(float num);
-
+float my_accu(const MATTYPE& X);
 
 VECTYPE find_lambda_cpp(const float alpha, const VECTYPE& cluster_E);
