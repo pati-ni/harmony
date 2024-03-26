@@ -254,10 +254,23 @@ int harmony::cluster_cpp() {
   unsigned iter;
 
 
-  Z_corr = arma::normalise(Z_corr, 2, 0);
-  // Z_corr has changed
-  // R has assumed to not change
-  // so update Y to match new integrated data  
+  if (objective_harmony.size() != 1) {
+    // We are coming after a correction step and this is a cold start
+    // of clustering Estimation Step. Rs are estimated from last
+    // iteration's estimation and do not reflect the current Z_corr
+    // embeddings. Re-estimate Rs from the new corrected parameters as
+    // we did in init_cluster_cpp
+    
+    Z_corr = arma::normalise(Z_corr, 2, 0);
+    dist_mat = 2 * (1 - Y.t() * Z_corr);  
+    R = -dist_mat;
+    R.each_col() /= sigma;
+    R = exp(R);
+    R.each_row() /= sum(R, 0);
+    E = sum(R, 1) * Pr_b.t();
+    O = R * Phi_t;
+  }
+  
   for (iter = 0; iter < max_iter_kmeans; iter++) {
       
       p.increment();
@@ -554,19 +567,6 @@ void harmony::moe_correct_ridge_cpp() {
 
 
   Y = arma::normalise(Y, 2, 0);
-  Z_corr = arma::normalise(Z_corr, 2, 0);
-  dist_mat = 2 * (1 - Y.t() * Z_corr);
-  
-  R = -dist_mat;
-  R.each_col() /= sigma;
-  R = exp(R);
-  R.each_row() /= sum(R, 0);
-
-
-  // std::cout << E << std::endl;
-  
-  E = sum(R, 1) * Pr_b.t();
-  O = R * Phi_t;
   
 
   
