@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <unordered_map>
 
 #include "harmony.h"
 #include "types.h"
@@ -7,7 +8,7 @@
 
 #include "timer.h"
 
-void print_timers() {
+void print_timers() {  
   std::cerr << "Print timers" << std::endl;
   for(auto const& t : timers) {
     std::cerr << t.first << " I got " << t.second.iter << " iterations " << t.second.elapsed/1000 << " seconds" << std::endl;
@@ -39,17 +40,15 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
 
   
   
-  {
-    Timer t(timers["sorting_elems"]);
-    
-    // TODO(Nikos) This works with one covariate it will have
-    // undefined behavior with several
-    
+  if (false) {
+    // TODO(Nikos) Sort according to one covariate to optimize
+    // correction steps using submat operations later.
+    Timer t(timers["sorting_elems"]);        
     orig_index.reserve(N);
     RSPMAT::const_iterator it =     __Phi.begin();
     RSPMAT::const_iterator it_end = __Phi.end();
     batch_indptr = arma::zeros<uvec>(B+1);
-    for(unsigned i=0; it != it_end; ++it, i++)
+    for (unsigned i=0; it != it_end; ++it, i++)
     {
       unsigned int row_idx = it.row(); // Batch
       unsigned int col_idx = it.col(); // Cell
@@ -81,14 +80,19 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
 		  VECTYPE(indices.n_rows, arma::fill::ones),
 		  N,
 		  B);
-  }
+    Z_orig = conv_to<MATTYPE>::from(__Z.cols(new_index));
+  } else{
+    original_index = linspace<uvec>(0, N - 1, N);
+    Z_orig = conv_to<MATTYPE>::from(__Z);
+  }     
   
   
-  Z_orig = conv_to<MATTYPE>::from(__Z.cols(new_index));
   Z_corr = arma::normalise(Z_orig, 2, 0);
   
-  // Phi = conv_to<SPMAT>::from(__Phi);
-  Phi = Phi_t.t();
+  Phi = conv_to<SPMAT>::from(__Phi);
+  Phi_t = Phi.t();
+  // Phi = Phi_t.t();
+  
   
   // Create index
   std::vector<unsigned>counters;
@@ -133,7 +137,19 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
     block_size = 0.2;
   } else {
     block_size = __block_size;
-  } 
+  }
+
+  
+  
+  // Covariate bounds
+  if (B_vec.size() > 1) {
+    covariate_bounds.resize(B_vec.size() - 1 );
+    std::partial_sum(B_vec.begin(), B_vec.end(), covariate_bounds.begin(), std::plus<unsigned>());
+  } else {
+    covariate_bounds.push_back(B_vec.front());
+  }
+  
+  
   theta = conv_to<VECTYPE>::from(__theta);
   max_iter_kmeans = __max_iter_kmeans;
 
@@ -205,6 +221,7 @@ void harmony::compute_objective() {
   objective_kmeans_dist.push_back(kmeans_error * norm_const);
   objective_kmeans_entropy.push_back(_entropy * norm_const);
   objective_kmeans_cross.push_back(_cross_entropy * norm_const);
+  
   std::cout << "Objective: \n\t Harmony:\t" << objective_kmeans.back() << std::endl;
   std::cout << "\t kmeans:\t" << objective_kmeans_dist.back() << std::endl;
   std::cout << "\t soft-k:\t" << objective_kmeans_entropy.back() << std::endl;
@@ -252,6 +269,8 @@ int harmony::cluster_cpp() {
   int err_status = 0;
   Progress p(max_iter_kmeans, verbose);
   unsigned iter;
+
+
 
 
   if (objective_harmony.size() != 1) {
@@ -393,28 +412,62 @@ void harmony::moe_correct_ridge_cpp() {
   Progress p(K, verbose);
 
   VECTYPE sizes(sum(Phi, 1));
-
   for (unsigned k = 0; k < K; k++) {
     VECTYPE avg_R(O.row(k).t()/sizes);
     bool subset_data = false;
     // Determine which batches do not belong to the cluster
     std::vector<unsigned> keep;
-    unsigned keep_cols_size = 0;
-    for (unsigned b = 0; b < B; b++) {
+    std::vector<unsigned> keep_cols_scratch;
+    
+    std::vector<unsigned>cov_levels(B_vec.size(), 0);
+    keep_cols_scratch.reserve(N*B_vec.size());   
+    // Estimate which covariates need to be corrected
+    for (unsigned b = 0, current_covariate = 0; b < B; b++) {
+
+      // Determine covariate
+      if ((current_covariate < covariate_bounds.size()) && !(b < covariate_bounds[current_covariate])) {
+	current_covariate++;
+      }
+      
       float batch_representation  = as_scalar(avg_R.row(b));
       if (batch_representation > batch_proportion_cutoff) {
-	keep.push_back(b);
-	keep_cols_size += this->index[b].n_rows;
+	cov_levels[current_covariate]++;
       }
     }
+
+    // Collect the cells we need to correct
+    for (unsigned b = 0, current_covariate = 0; b < B; b++) {
+      float batch_representation  = as_scalar(avg_R.row(b));
+      // Determine covariate
+      if ((current_covariate < covariate_bounds.size()) && !(b < covariate_bounds[current_covariate])) {
+	current_covariate++;
+      }
+      
+      // Determine whether we need to include batch
+      if (batch_representation > batch_proportion_cutoff && cov_levels[current_covariate] > 1) {
+	keep.push_back(b);
+	keep_cols_scratch.insert(keep_cols_scratch.end(), index[b].memptr(), index[b].memptr() + index[b].n_rows);
+      }
+    }
+    
+    unsigned active_covariates = 0;
+    for (auto const& l: cov_levels) {
+      if (l > 1) {
+	active_covariates++;
+      }
+    }
+    
     arma::uvec keep_batch = arma::conv_to<arma::uvec>::from(keep);
     MATTYPE *_Z_corr, *_Z_tmp;
+    arma::uvec keep_cols;
     SPMAT *_Phi_moe, *_Phi_moe_t, *_lambda_mat, *__Rk;
     std::vector<arma::uvec>* _index;
-    arma::uvec keep_cols(keep_cols_size);
+    
+    
+    
     // Drop unused batches
     if (keep.size() == B) {
-      std::cout << "Normal pass of the data " << std::endl;
+      // std::cout << "Normal pass of the data " << std::endl;
       // Avoid expensive copy, in this case we do not delete the
       // pointer as it is handled by the object lifetime
       _Z_corr = &(this->Z_corr);
@@ -434,43 +487,88 @@ void harmony::moe_correct_ridge_cpp() {
       }
     } else {
       subset_data = true;
-      std::cout << "Filter " << B - keep.size() << " out of " << B << " batches" << std::endl;
+      // std::cout << "Filter " << B - keep.size() << " out of " << B << " batches" << std::endl;
       Timer t(timers["subset_overhead"]);
+     
 
-      arma::uvec indptr(keep.size() + 1 + 1); // +1 for the intercept, +1 for the indptr
-      arma::uvec rowind((2 * keep_cols_size));
-      _index = new std::vector<arma::uvec>();
-      indptr(0) = 0;
-      indptr(1) = keep_cols_size; // Intercept  fill everything with ones
-
-      // row indices when we have one covariate is a matter of concatenating all indices twice
-      arma::uvec new_index = linspace<uvec>(0, keep_cols_size-1, keep_cols_size);
-      rowind = join_cols(new_index, new_index);
-
-      unsigned offset = 0;
-      for (unsigned i = 0; i < keep.size(); i++) {
-	const auto& batch_ind = this->index[keep[i]];
-	keep_cols.subvec(offset, offset + batch_ind.n_rows - 1) = batch_ind;
-	indptr(i+2) = indptr(i+1) + batch_ind.n_rows;
-	_index->push_back(rowind.subvec(indptr(i+1), indptr(i+2)-1));
-	offset += batch_ind.n_rows;
+      //--Generate the new rowind, indptr. Determine the correct size
+      // for the new sparse matrix. The size of entries in general are
+      // N*number of covariates.
+      if (active_covariates == 0) {
+	// Rcpp::Rcout << "Skipping correction step" << std::endl;
+	continue;
       }
+      
+      // Subset the old sparse design matrix and map to the new cell index
+      std::set<unsigned> keep_cols_set(keep_cols_scratch.begin(), keep_cols_scratch.end());
+      std::unordered_map<unsigned, unsigned> cell_map;
+      
+      unsigned i = 0;
+      for (auto const& c: keep_cols_set) {
+	cell_map[c] = i++;
+      }
+      
+      
+      
+
+      // Initialize the new sparse matrix buffers
+      arma::uvec rowind_new(N*(active_covariates+1)); // Active covariates plus intercept
+      arma::uvec indptr_new(keep.size() + 1 + 1); // +1 for the intercept, +1 for the indptr
+      rowind_new.subvec(0, keep_cols_set.size()-1) = linspace<uvec>(0, keep_cols_set.size()-1, keep_cols_set.size());
+      indptr_new[0] = 0;
+      indptr_new[1] = keep_cols_set.size();
+
+      // Get the new index
+      _index = new std::vector<arma::uvec>();
+      
+      // Get data from existing data structure, values are 1 by default
+      const uword* rowind_old = Phi_moe_t.row_indices;
+      const uword* indptr_old = Phi_moe_t.col_ptrs;
+
+      for (unsigned i = 0; i < keep.size(); i++) {	
+	unsigned cell_offset = 0; // for the indptr	
+	// Determine which covariate are is the level we are iterating
+	auto batch_id = keep[i];
+	// if (!(batch_id < covariate_bounds[current_covariate]) && (current_covariate != B_vec.size())) {
+	//   current_covariate++;
+	// }
+	
+	// if (cov_levels[current_covariate] < 2) {
+	//   continue;
+	// }
+	
+	unsigned max_idx = indptr_old[batch_id+2], min_idx = indptr_old[batch_id+1];
+	unsigned base_range = indptr_new[i+1];	
+	// Determine whether we need to filter the cell by checking whether it is in the map
+	for (unsigned idx = min_idx; idx < max_idx; ++idx) {
+	  auto it = cell_map.find(rowind_old[idx]);
+	  if(it == cell_map.end())
+	    continue;	  
+	  rowind_new[base_range + (cell_offset++)] = it->second;
+	}
+	
+	indptr_new[i+2] = indptr_new[i+1] + cell_offset;
+	_index->push_back(rowind_new.subvec(indptr_new(i+1), indptr_new(i+2)-1));
+      }
+      
+
+      std::vector<unsigned> keep_cols_vector(keep_cols_set.begin(), keep_cols_set.end());
+      keep_cols = conv_to<arma::uvec>::from(keep_cols_vector);
+      
       for (unsigned i = 1; i < keep_cols.n_rows; i++) {
 	if (!(keep_cols(i-1) < keep_cols(i))) {
 	  Rcpp::stop("Matrix needs ordering");
 	}
       }
-
-      _Z_corr = new MATTYPE();
-      (*_Z_corr) = this->Z_corr.cols(keep_cols);
+      _Z_corr = new MATTYPE(this->Z_corr.cols(keep_cols));
       _Z_tmp = new MATTYPE(this->Z_orig.cols(keep_cols));
 
-      _Phi_moe_t = new SPMAT(rowind,
-			     indptr,
-			     VECTYPE(rowind.n_rows, arma::fill::ones),
-			     keep_cols_size,
+      _Phi_moe_t = new SPMAT(rowind_new,
+			     indptr_new,
+			     VECTYPE(rowind_new.n_rows, arma::fill::ones),
+			     keep_cols.n_rows,
 			     keep.size() + 1);
-
+      
       _Phi_moe = new SPMAT(_Phi_moe_t->t());
 
       // Generate new Rs
@@ -547,7 +645,7 @@ void harmony::moe_correct_ridge_cpp() {
       Timer t(timers["update_Zcorr"]);
       Z_corr -= W.t() * Phi_Rk;
     }
-
+    
     if (subset_data) {
       Timer t(timers["subset_overhead"]);
       // Update original Zcorr columns
@@ -567,10 +665,9 @@ void harmony::moe_correct_ridge_cpp() {
 
 
   Y = arma::normalise(Y, 2, 0);
-  
 
   
-  print_timers();
+  // print_timers();
 
 
 
@@ -605,7 +702,7 @@ RMAT harmony::getZcorr() {
 }
 
 RMAT harmony::getZorig() {
-  return conv_to<RMAT>::from(Z_orig.cols(original_index));  
+  return conv_to<RMAT>::from(Z_orig.cols(original_index));
 }
 
 

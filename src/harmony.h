@@ -63,7 +63,7 @@ public:
 
   // auxilary data structures
   vector<float> objective_kmeans, objective_kmeans_dist, objective_kmeans_entropy, objective_kmeans_cross, objective_harmony;
-  vector<int> kmeans_rounds, B_vec; // OLD: Kb
+  vector<int> kmeans_rounds, B_vec, covariate_bounds; // OLD: Kb
   std::vector<arma::uvec>index;
   arma::uvec batch_sizes, new_index, original_index, batch_indptr;
   
