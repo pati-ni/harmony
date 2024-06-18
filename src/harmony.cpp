@@ -500,12 +500,16 @@ void harmony::moe_correct_ridge_cpp() {
       }
       
       // Subset the old sparse design matrix and map to the new cell index
-      std::set<unsigned> keep_cols_set(keep_cols_scratch.begin(), keep_cols_scratch.end());
-      std::unordered_map<unsigned, unsigned> cell_map;
       
-      unsigned i = 0;
-      for (auto const& c: keep_cols_set) {
-	cell_map[c] = i++;
+      std::set<unsigned> keep_cols_set(keep_cols_scratch.begin(), keep_cols_scratch.end());
+      std::vector<int> cell_map(N, -1);
+      // cell_map.reserve(N);
+      {
+	Timer t(timers["subset_overhead_mapping"]);
+	unsigned i = 0;
+	for (auto const& c: keep_cols_set) {
+	  cell_map[c] = i++;
+	}
       }
       
       
@@ -541,12 +545,11 @@ void harmony::moe_correct_ridge_cpp() {
 	unsigned base_range = indptr_new[i+1];	
 	// Determine whether we need to filter the cell by checking whether it is in the map
 	for (unsigned idx = min_idx; idx < max_idx; ++idx) {
-	  auto it = cell_map.find(rowind_old[idx]);
-	  if(it == cell_map.end())
-	    continue;	  
-	  rowind_new[base_range + (cell_offset++)] = it->second;
-	}
-	
+	  int new_index = cell_map[rowind_old[idx]];
+	  if(new_index == -1)
+	    continue;
+	  rowind_new[base_range + (cell_offset++)] = new_index;
+	}	
 	indptr_new[i+2] = indptr_new[i+1] + cell_offset;
 	_index->push_back(rowind_new.subvec(indptr_new(i+1), indptr_new(i+2)-1));
       }
