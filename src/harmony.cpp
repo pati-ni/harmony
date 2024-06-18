@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <chrono>
 #include <unordered_map>
+#include <cstring>
 
 #include "harmony.h"
 #include "types.h"
@@ -528,19 +529,13 @@ void harmony::moe_correct_ridge_cpp() {
       // Get data from existing data structure, values are 1 by default
       const uword* rowind_old = Phi_moe_t.row_indices;
       const uword* indptr_old = Phi_moe_t.col_ptrs;
-
-      for (unsigned i = 0; i < keep.size(); i++) {	
+      // {
+	// Timer t(timers["subset_overhead_subsetting"]);
+      
+      for (unsigned i = 0; i < keep.size(); i++) {
 	unsigned cell_offset = 0; // for the indptr	
 	// Determine which covariate are is the level we are iterating
 	auto batch_id = keep[i];
-	// if (!(batch_id < covariate_bounds[current_covariate]) && (current_covariate != B_vec.size())) {
-	//   current_covariate++;
-	// }
-	
-	// if (cov_levels[current_covariate] < 2) {
-	//   continue;
-	// }
-	
 	unsigned max_idx = indptr_old[batch_id+2], min_idx = indptr_old[batch_id+1];
 	unsigned base_range = indptr_new[i+1];	
 	// Determine whether we need to filter the cell by checking whether it is in the map
@@ -558,40 +553,104 @@ void harmony::moe_correct_ridge_cpp() {
       std::vector<unsigned> keep_cols_vector(keep_cols_set.begin(), keep_cols_set.end());
       keep_cols = conv_to<arma::uvec>::from(keep_cols_vector);
       
-      for (unsigned i = 1; i < keep_cols.n_rows; i++) {
-	if (!(keep_cols(i-1) < keep_cols(i))) {
-	  Rcpp::stop("Matrix needs ordering");
+      // }
+
+
+
+      {
+	Timer t(timers["subset_overhead_contig"]);
+	
+	std::vector<std::pair<unsigned,unsigned>> res = find_contigs(keep_cols_vector);
+	unsigned current_size = 0;
+	const unsigned _nrows = this->Z_corr.n_rows;
+	_Z_corr = new MATTYPE(_nrows, keep_cols.size());
+	_Z_tmp = new MATTYPE(_nrows, keep_cols.size());
+	float* _zcorr_ptr = _Z_corr->memptr();
+	float* _ztmp_ptr = _Z_tmp->memptr();
+	float* zcorr_ptr_source = this->Z_corr.memptr();
+	float* zorig_ptr_source = this->Z_orig.memptr();
+	
+	std::vector<unsigned> offsets;
+	offsets.reserve(res.size());
+	for (auto const& r : res) {
+	  unsigned block_size = r.second - r.first + 1; // at least one cell
+	  offsets.push_back(current_size);
+	  current_size += block_size;
 	}
-      }
-      _Z_corr = new MATTYPE(this->Z_corr.cols(keep_cols));
-      _Z_tmp = new MATTYPE(this->Z_orig.cols(keep_cols));
 
-      _Phi_moe_t = new SPMAT(rowind_new,
-			     indptr_new,
-			     VECTYPE(rowind_new.n_rows, arma::fill::ones),
-			     keep_cols.n_rows,
-			     keep.size() + 1);
+
+	for (int i =0; i < res.size(); i++) {
+	  auto const& r = res[i];
+	  unsigned _ncols = r.second - r.first + 1; // at least one cell
+	  unsigned nbytes = _ncols * _nrows * sizeof(SCALAR);
+	  unsigned newmat_offset = (offsets[i] * _nrows);
+	  unsigned origmat_offset  = (keep_cols_vector[r.first]*_nrows);
+	  // std::cout << newmat_offset << " " << origmat_offset << " " << nbytes << std::endl;
+	  /// These are non-overlapping memory segments
+
+	  {
+	    Timer t(timers["subset_overhead_memcpy"]);
+	    memcpy(_zcorr_ptr + newmat_offset, zcorr_ptr_source + origmat_offset, nbytes);
+	    memcpy(_ztmp_ptr + newmat_offset, zorig_ptr_source + origmat_offset, nbytes);}
+	  {
+	    Timer t(timers["subset_overhead_span"]);
+	    
+	    (*_Z_corr)(arma::span::all,
+		       arma::span(offsets[i], offsets[i] + _ncols - 1)) =
+	      this->Z_corr(arma::span::all,
+			   arma::span(keep_cols_vector[r.first], keep_cols_vector[r.first] + _ncols - 1));
+	  
+	    (*_Z_tmp)(arma::span::all,
+		      arma::span(offsets[i], offsets[i] + _ncols - 1)) =
+	      this->Z_orig(arma::span::all,
+			   arma::span(keep_cols_vector[r.first], keep_cols_vector[r.first] + _ncols - 1));
+	  }
+	  
+	}
+	delete _Z_corr;
+	delete _Z_tmp;
+	
+      }
       
-      _Phi_moe = new SPMAT(_Phi_moe_t->t());
+      {
+	Timer t(timers["subset_overhead_buffers"]);
+	{
+	  Timer t(timers["subset_overhead_buffers_Z"]);
+	  _Z_corr = new MATTYPE(this->Z_corr.cols(keep_cols));
+	  _Z_tmp = new MATTYPE(this->Z_orig.cols(keep_cols));
+	}
+	{
+	  Timer t(timers["subset_overhead_buffers_Phi"]);
+	_Phi_moe_t = new SPMAT(rowind_new,
+			       indptr_new,
+			       VECTYPE(rowind_new.n_rows, arma::fill::ones),
+			       keep_cols.n_rows,
+			       keep.size() + 1);
+	}
+	{
+	  Timer t(timers["subset_overhead_buffers_t()"]);
+	  _Phi_moe = new SPMAT(_Phi_moe_t->t());
+	}
+	// Generate new Rs
+	__Rk = new SPMAT(_Z_corr->n_cols, _Z_corr->n_cols);
+	VECTYPE _R(this->R.row(k).as_col());
 
-      // Generate new Rs
-      __Rk = new SPMAT(_Z_corr->n_cols, _Z_corr->n_cols);
-      VECTYPE _R(this->R.row(k).as_col());
+	__Rk->diag() = _R.rows(keep_cols);
+	_lambda_mat = new SPMAT(keep.size() + 1, keep.size() + 1);
+	if (!lambda_estimation) {
+	  // Set lambda
+	  VECTYPE _ltmp(keep_batch.n_rows + 1);
+	  _ltmp(0) = 0;
+	  _ltmp.subvec(1, keep_batch.n_rows) = lambda.rows(keep_batch+1);
+	  _lambda_mat->diag() = _ltmp.as_row();
+	} else {
 
-      __Rk->diag() = _R.rows(keep_cols);
-      _lambda_mat = new SPMAT(keep.size() + 1, keep.size() + 1);
-      if (!lambda_estimation) {
-	// Set lambda
-	VECTYPE _ltmp(keep_batch.n_rows + 1);
-	_ltmp(0) = 0;
-	_ltmp.subvec(1, keep_batch.n_rows) = lambda.rows(keep_batch+1);
-	_lambda_mat->diag() = _ltmp.as_row();
-      } else {
-
-	VECTYPE Esub = E.row(k).as_col();
-	Esub = Esub.rows(keep_batch);
-	_lambda_mat->diag() = find_lambda_cpp(alpha, Esub).as_row();
-      }
+	  VECTYPE Esub = E.row(k).as_col();
+	  Esub = Esub.rows(keep_batch);
+	  _lambda_mat->diag() = find_lambda_cpp(alpha, Esub).as_row();
+	}
+      }      
+      
     }
 
     MATTYPE& Z_corr= (*_Z_corr);
@@ -603,11 +662,21 @@ void harmony::moe_correct_ridge_cpp() {
     std::vector<arma::uvec>& index = *_index;
 
     Timer t(timers["correct_ridge_loop"]);
+    
+    
+
+
     p.increment();
     if (Progress::check_abort())
       return;
 
+    
+    
+    Timer *t1 = new Timer(timers["Phi_Rk"]);
     SPMAT Phi_Rk = Phi_moe * _Rk;
+    delete t1;
+    
+    
 
     MATTYPE inv_cov, Phi_cov;
     {
@@ -650,7 +719,7 @@ void harmony::moe_correct_ridge_cpp() {
     }
     
     if (subset_data) {
-      Timer t(timers["subset_overhead"]);
+      Timer t(timers["subset_overhead_assign"]);
       // Update original Zcorr columns
       this->Z_corr.cols(keep_cols) = Z_corr;
       // We don't need anything else
@@ -670,12 +739,15 @@ void harmony::moe_correct_ridge_cpp() {
   Y = arma::normalise(Y, 2, 0);
 
   
-  // print_timers();
+  print_timers();
 
 
 
 
 }
+
+
+
 
 // CUBETYPE harmony::moe_ridge_get_betas_cpp() {
 //   CUBETYPE W_cube(B+1, d, K); // rows, cols, slices

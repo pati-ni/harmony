@@ -15,3 +15,5 @@ int my_ceil(float num);
 float my_accu(const MATTYPE& X);
 
 VECTYPE find_lambda_cpp(const float alpha, const VECTYPE& cluster_E);
+
+std::vector< std::pair<unsigned,unsigned> > find_contigs(std::vector<unsigned>& keep_vectors);

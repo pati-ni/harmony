@@ -168,3 +168,26 @@ VECTYPE find_lambda_cpp(const float alpha, const VECTYPE& cluster_E) {
   lambda_dym_vec.subvec(1, lambda_dym_vec.n_rows - 1) = cluster_E * alpha;
   return lambda_dym_vec;
 }
+
+
+
+
+
+std::vector< std::pair<unsigned,unsigned> > find_contigs(std::vector<unsigned>& keep_vectors) {
+  unsigned kprev = keep_vectors[0], k;
+  std::vector< std::pair<unsigned,unsigned> > ranges;
+  unsigned i0 = 0, i;
+  ranges.reserve(10000);
+  for (i = 1; i < keep_vectors.size(); ++i) {
+    k = keep_vectors[i];
+    if (k - kprev  != 1) {
+      // std::cout << "i0 = " << i0 << " i= "  << i << std::endl;
+      ranges.push_back({i0, i - 1});
+      
+      i0 = i;
+    }
+    kprev = k;
+  }
+  ranges.push_back({i0, i-1});
+  return ranges;
+}
