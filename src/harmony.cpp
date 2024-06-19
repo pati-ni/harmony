@@ -413,44 +413,57 @@ void harmony::moe_correct_ridge_cpp() {
   Progress p(K, verbose);
 
   VECTYPE sizes(sum(Phi, 1));
+  VECTYPE _R;
   for (unsigned k = 0; k < K; k++) {
-    VECTYPE avg_R(O.row(k).t()/sizes);
+
+    p.increment();
+    if (Progress::check_abort())
+      return;
+    
+    VECTYPE avg_R(O.row(k).t() / sizes);
     bool subset_data = false;
     // Determine which batches do not belong to the cluster
     std::vector<unsigned> keep;
     std::vector<unsigned> keep_cols_scratch;
-    
     std::vector<unsigned>cov_levels(B_vec.size(), 0);
-    keep_cols_scratch.reserve(N*B_vec.size());   
-    // Estimate which covariates need to be corrected
+    keep_cols_scratch.reserve(N*B_vec.size());
+    // Estimate which covariates have sufficient support and need to
+    // be corrected
     for (unsigned b = 0, current_covariate = 0; b < B; b++) {
-
-      // Determine covariate
+      // Determine covariate of factor
       if ((current_covariate < covariate_bounds.size()) && !(b < covariate_bounds[current_covariate])) {
 	current_covariate++;
       }
       
       float batch_representation  = as_scalar(avg_R.row(b));
       if (batch_representation > batch_proportion_cutoff) {
+	// Increase the number of batches that qualify for correction
 	cov_levels[current_covariate]++;
       }
     }
+    
+    // for (unsigned c =0; c < B_vec.size(); ++c ){
+      
+    //   std::cout << "Covariate level " << c << ": Included " << cov_levels[c] << " out of " << B_vec[c] << std::endl;
+    // }
 
     // Collect the cells we need to correct
     for (unsigned b = 0, current_covariate = 0; b < B; b++) {
-      float batch_representation  = as_scalar(avg_R.row(b));
-      // Determine covariate
-      if ((current_covariate < covariate_bounds.size()) && !(b < covariate_bounds[current_covariate])) {
+      
+      // Increase covariate if we iterated through all the levels
+      if ((current_covariate < covariate_bounds.size()) && !(b < covariate_bounds[current_covariate])) {	
 	current_covariate++;
       }
       
       // Determine whether we need to include batch
+      float batch_representation  = as_scalar(avg_R.row(b));
       if (batch_representation > batch_proportion_cutoff && cov_levels[current_covariate] > 1) {
 	keep.push_back(b);
 	keep_cols_scratch.insert(keep_cols_scratch.end(), index[b].memptr(), index[b].memptr() + index[b].n_rows);
       }
     }
-    
+
+    // Determine the active covariates pre-allocation of buffers
     unsigned active_covariates = 0;
     for (auto const& l: cov_levels) {
       if (l > 1) {
@@ -463,8 +476,8 @@ void harmony::moe_correct_ridge_cpp() {
     arma::uvec keep_cols;
     SPMAT *_Phi_moe, *_Phi_moe_t, *_lambda_mat, *__Rk;
     std::vector<arma::uvec>* _index;
-    
-    
+    VECTYPE _R;
+    unsigned PhiNonZero = 0;
     
     // Drop unused batches
     if (keep.size() == B) {
@@ -503,23 +516,27 @@ void harmony::moe_correct_ridge_cpp() {
       // Subset the old sparse design matrix and map to the new cell index
       
       std::set<unsigned> keep_cols_set(keep_cols_scratch.begin(), keep_cols_scratch.end());
+      PhiNonZero = keep_cols_set.size() + keep_cols_scratch.size(); // Batches included + intercept
+      // So we can slice easily arma data structures
+      keep_cols = conv_to<arma::uvec>::from(std::vector<unsigned>(keep_cols_set.begin(),
+								  keep_cols_set.end()));
       std::vector<int> cell_map(N, -1);
-      // cell_map.reserve(N);
       {
 	Timer t(timers["subset_overhead_mapping"]);
 	unsigned i = 0;
-	for (auto const& c: keep_cols_set) {
+	for (auto const& c: keep_cols_set) {	  
 	  cell_map[c] = i++;
 	}
       }
       
+      // std::cout << "Total cells: " << keep_cols_set.size() << " in " <<  keep.size() << " batches" << std::endl;
       
+      Timer* t1 = new Timer(timers["subset_prepare_timers"]);
       
-
       // Initialize the new sparse matrix buffers
-      arma::uvec rowind_new(N*(active_covariates+1)); // Active covariates plus intercept
+      arma::uvec rowind_new(PhiNonZero); // Active covariates plus intercept
       arma::uvec indptr_new(keep.size() + 1 + 1); // +1 for the intercept, +1 for the indptr
-      rowind_new.subvec(0, keep_cols_set.size()-1) = linspace<uvec>(0, keep_cols_set.size()-1, keep_cols_set.size());
+      rowind_new.subvec(0, keep_cols_set.size() - 1) = linspace<uvec>(0, keep_cols_set.size() - 1, keep_cols_set.size());
       indptr_new[0] = 0;
       indptr_new[1] = keep_cols_set.size();
 
@@ -529,87 +546,25 @@ void harmony::moe_correct_ridge_cpp() {
       // Get data from existing data structure, values are 1 by default
       const uword* rowind_old = Phi_moe_t.row_indices;
       const uword* indptr_old = Phi_moe_t.col_ptrs;
-      // {
-	// Timer t(timers["subset_overhead_subsetting"]);
-      
-      for (unsigned i = 0; i < keep.size(); i++) {
-	unsigned cell_offset = 0; // for the indptr	
-	// Determine which covariate are is the level we are iterating
-	auto batch_id = keep[i];
-	unsigned max_idx = indptr_old[batch_id+2], min_idx = indptr_old[batch_id+1];
-	unsigned base_range = indptr_new[i+1];	
-	// Determine whether we need to filter the cell by checking whether it is in the map
-	for (unsigned idx = min_idx; idx < max_idx; ++idx) {
-	  int new_index = cell_map[rowind_old[idx]];
-	  if(new_index == -1)
-	    continue;
-	  rowind_new[base_range + (cell_offset++)] = new_index;
-	}	
-	indptr_new[i+2] = indptr_new[i+1] + cell_offset;
-	_index->push_back(rowind_new.subvec(indptr_new(i+1), indptr_new(i+2)-1));
-      }
-      
-
-      std::vector<unsigned> keep_cols_vector(keep_cols_set.begin(), keep_cols_set.end());
-      keep_cols = conv_to<arma::uvec>::from(keep_cols_vector);
-      
-      // }
-
-
-
       {
-	Timer t(timers["subset_overhead_contig"]);
+	Timer t(timers["subset_overhead_subsetting"]);
+      
+	for (unsigned i = 0; i < keep.size(); i++) {
+	  unsigned cell_offset = 0; // for the indptr	
+	  // Determine which covariate are is the level we are iterating
+	  auto batch_id = keep[i];
+	  unsigned max_idx = indptr_old[batch_id+2], min_idx = indptr_old[batch_id+1];
+	  unsigned base_range = indptr_new(i+1);
 	
-	std::vector<std::pair<unsigned,unsigned>> res = find_contigs(keep_cols_vector);
-	unsigned current_size = 0;
-	const unsigned _nrows = this->Z_corr.n_rows;
-	_Z_corr = new MATTYPE(_nrows, keep_cols.size());
-	_Z_tmp = new MATTYPE(_nrows, keep_cols.size());
-	float* _zcorr_ptr = _Z_corr->memptr();
-	float* _ztmp_ptr = _Z_tmp->memptr();
-	float* zcorr_ptr_source = this->Z_corr.memptr();
-	float* zorig_ptr_source = this->Z_orig.memptr();
-	
-	std::vector<unsigned> offsets;
-	offsets.reserve(res.size());
-	for (auto const& r : res) {
-	  unsigned block_size = r.second - r.first + 1; // at least one cell
-	  offsets.push_back(current_size);
-	  current_size += block_size;
-	}
-
-
-	for (int i =0; i < res.size(); i++) {
-	  auto const& r = res[i];
-	  unsigned _ncols = r.second - r.first + 1; // at least one cell
-	  unsigned nbytes = _ncols * _nrows * sizeof(SCALAR);
-	  unsigned newmat_offset = (offsets[i] * _nrows);
-	  unsigned origmat_offset  = (keep_cols_vector[r.first]*_nrows);
-	  // std::cout << newmat_offset << " " << origmat_offset << " " << nbytes << std::endl;
-	  /// These are non-overlapping memory segments
-
-	  {
-	    Timer t(timers["subset_overhead_memcpy"]);
-	    memcpy(_zcorr_ptr + newmat_offset, zcorr_ptr_source + origmat_offset, nbytes);
-	    memcpy(_ztmp_ptr + newmat_offset, zorig_ptr_source + origmat_offset, nbytes);}
-	  {
-	    Timer t(timers["subset_overhead_span"]);
-	    
-	    (*_Z_corr)(arma::span::all,
-		       arma::span(offsets[i], offsets[i] + _ncols - 1)) =
-	      this->Z_corr(arma::span::all,
-			   arma::span(keep_cols_vector[r.first], keep_cols_vector[r.first] + _ncols - 1));
-	  
-	    (*_Z_tmp)(arma::span::all,
-		      arma::span(offsets[i], offsets[i] + _ncols - 1)) =
-	      this->Z_orig(arma::span::all,
-			   arma::span(keep_cols_vector[r.first], keep_cols_vector[r.first] + _ncols - 1));
+	  for (unsigned idx = min_idx; idx < max_idx; ++idx) {
+	    int new_index = cell_map[rowind_old[idx]];
+	    rowind_new(base_range + (cell_offset++)) = new_index;
 	  }
-	  
+	  indptr_new(i+2) = base_range + cell_offset;	  
+	  _index->push_back(rowind_new.subvec(base_range, indptr_new(i+2)-1));
 	}
-	delete _Z_corr;
-	delete _Z_tmp;
 	
+	delete t1;
       }
       
       {
@@ -623,8 +578,8 @@ void harmony::moe_correct_ridge_cpp() {
 	  Timer t(timers["subset_overhead_buffers_Phi"]);
 	_Phi_moe_t = new SPMAT(rowind_new,
 			       indptr_new,
-			       VECTYPE(rowind_new.n_rows, arma::fill::ones),
-			       keep_cols.n_rows,
+			       VECTYPE(rowind_new.n_elem, arma::fill::ones),
+			       keep_cols.n_elem,
 			       keep.size() + 1);
 	}
 	{
@@ -661,21 +616,37 @@ void harmony::moe_correct_ridge_cpp() {
     MATTYPE& Z_tmp = (*_Z_tmp);
     std::vector<arma::uvec>& index = *_index;
 
-    Timer t(timers["correct_ridge_loop"]);
-    
-    
+    Timer t(timers["correct_ridge_loop"]);        
 
-
-    p.increment();
-    if (Progress::check_abort())
-      return;
-
-    
     
     Timer *t1 = new Timer(timers["Phi_Rk"]);
     SPMAT Phi_Rk = Phi_moe * _Rk;
     delete t1;
     
+    // t1 = new Timer(timers["Phi_Rk_optimized"]);
+    
+    // // https://gitlab.com/conradsnicta/armadillo-code/-/blob/14.0.x/include/armadillo_bits/SpMat_bones.hpp?ref_type=heads#L69
+    
+    // VECTYPE Rk_vals(_Rk.values, _Rk.n_cols);
+    // VECTYPE _Phi_Rk_vals(_Rk.n_cols * (active_covariates + 1));
+    // const unsigned ac = active_covariates + 1;
+    
+    // unsigned n_cells = _Rk.n_cols;
+    // // For each cell we have active_covariates + 1 
+    // for (unsigned i1 = 0; i1 < n_cells; ++i1) {
+    //   for (unsigned i2 = 0; i2 < ac; ++i2) {       
+    // 	_Phi_Rk_vals((i1 * ac) + i2) = Rk_vals(i1);
+    //   }
+    // }
+    // for (unsigned c = 0; c < active_covariates + 1; ++c) {
+    //   _Phi_Rk_vals(arma::span(c * _Rk.n_cols, ((c + 1) * _Rk.n_cols) - 1)) =;
+    // }
+    
+    // SPMAT Phi_Rk2(arma::uvec(Phi_moe.row_indices, Phi_moe.n_nonzero),
+    // 		  arma::uvec(Phi_moe.col_ptrs, Phi_moe.n_cols + 1),
+    // 		  _Phi_Rk_vals, Phi_moe.n_rows, Phi_moe.n_cols, false);
+    
+    // delete t1;
     
 
     MATTYPE inv_cov, Phi_cov;
