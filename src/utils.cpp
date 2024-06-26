@@ -8,50 +8,42 @@
 
 
 MATTYPE initialize_centroids(const MATTYPE& X, const unsigned int K, bool verbose) {
-  // Select K random points
+  // K-means++ centroid initialization
   VECTYPE random_seeds(K, arma::fill::randu);
   arma::uvec indices = arma::conv_to<arma::uvec>::from(round(random_seeds * X.n_cols));
-  MATTYPE Y(X.cols(indices)); // That's the initial centroids samples for k-means++
   
-  // Adapted by Weighted Random Sampling (2005; Efraimidis, Spirakis)
+  MATTYPE Y(X.cols(indices));    
   if (verbose) {
     Rcpp::Rcout << "Initializing centroids" << std::endl;
   }
-  srand(time(0));
+  
   Progress p(K, verbose);
   std::set<unsigned> sup;
-
-  // Rand init
-  std::random_device rand_dev;
-  std::mt19937 generator(rand_dev());
-  std::uniform_real_distribution<float>  distr(0.01, 0.99);
   
+  // k-means++
   for (unsigned int i = 0; i < K; i++) {
     p.increment();
-    VECTYPE distances = ((2* (1 - Y.col(i).t() * X)).as_col()) / 4;
+    
+    VECTYPE distances = arma::abs((2* (1 - Y.col(i).t() * X)).as_col());    
     VECTYPE random_numbers(size(distances), arma::fill::randu);
     
-    // randu of armadillo is not working properly so let's handroll random uniform numbers
-    for(unsigned _i = 0; _i < random_numbers.n_rows; ++_i) {
-      random_numbers(_i) = distr(generator);
-    }
+    // Weighted Random Sampling, sample from different expontential
+    // distributions with distance as different rate parameters
+    VECTYPE prob = -arma::log(random_numbers) / distances;
     
-    VECTYPE prob = arma::pow(random_numbers, 1 / distances);
-    // We don't want to select the same points
-    for (const auto& s: sup) {
-      prob(s) = 0;
-    }
-    prob(indices(i)) = 0;
+    auto index = prob.index_min();
     
-    auto index = prob.index_max();
-    if (sup.find(index) != sup.end()) {
+    // Make sure we have not selected the same point for cluster centroid already
+    // This can be happen particularly in small datasets
+    while (sup.find(index) != sup.end()) {
       std::cerr << index << "exists, retrying for cluster " << i << " " << distances(index) <<std::endl;
-      i--;
-      continue;
-    }   
+      prob[index] = 1;
+      index = prob.index_min();      
+    }
     sup.insert(index);
     Y.col(i) = X.col(index);
-  }  
+  }
+  
   return Y;
 }
 
