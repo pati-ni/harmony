@@ -54,7 +54,7 @@ public:
   void setY(const MATTYPE& Z);
   RMAT getZcorr();
   RMAT getZorig();
-  
+  RMAT getR();
 
   /* FIELDS */
   MATTYPE R, Z_orig, Z_corr, Y;

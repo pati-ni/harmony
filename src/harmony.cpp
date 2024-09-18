@@ -747,6 +747,10 @@ RMAT harmony::getZcorr() {
   return conv_to<RMAT>::from(Z_corr.cols(original_index));
 }
 
+RMAT harmony::getR() {
+  return conv_to<RMAT>::from(R.cols(original_index));
+}
+
 RMAT harmony::getZorig() {
   return conv_to<RMAT>::from(Z_orig.cols(original_index));
 }
@@ -781,6 +785,7 @@ RCPP_MODULE(harmony_module) {
       .field("max_iter_kmeans", &harmony::max_iter_kmeans)
     .method("getZcorr", &harmony::getZcorr)
     .method("getZorig", &harmony::getZorig)
+    .method("getR", &harmony::getR)
       .method("check_convergence", &harmony::check_convergence)
       .method("setup", &harmony::setup)
       .method("compute_objective", &harmony::compute_objective)
