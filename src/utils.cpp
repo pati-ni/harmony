@@ -37,7 +37,7 @@ MATTYPE initialize_centroids(const MATTYPE& X, const unsigned int K, bool verbos
     // This can be happen particularly in small datasets
     while (sup.find(index) != sup.end()) {
       std::cerr << index << "exists, retrying for cluster " << i << " " << distances(index) <<std::endl;
-      prob[index] = 1;
+      prob[index] = prob.max();
       index = prob.index_min();      
     }
     sup.insert(index);
