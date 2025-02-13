@@ -425,6 +425,7 @@ void harmony::moe_correct_ridge_cpp() {
     std::vector<unsigned> keep;
     std::vector<unsigned> keep_cols_scratch;
     std::vector<unsigned>cov_levels(B_vec.size(), 0);
+    std::vector<unsigned>cells(B_vec.size(), 0);
     keep_cols_scratch.reserve(N*B_vec.size());
     // Estimate which covariates have sufficient support and need to
     // be corrected
@@ -438,13 +439,14 @@ void harmony::moe_correct_ridge_cpp() {
       if (batch_representation > batch_proportion_cutoff) {
 	// Increase the number of batches that qualify for correction
 	cov_levels[current_covariate]++;
+	cells[current_covariate] += O(k,b);
       }
     }
-    
-    // for (unsigned c =0; c < B_vec.size(); ++c ){
-      
-    //   std::cout << "Covariate level " << c << ": Included " << cov_levels[c] << " out of " << B_vec[c] << std::endl;
-    // }
+    if(verbose){
+      for (unsigned c =0; c < B_vec.size(); ++c ) {
+	std::cout << "Cluster k:" << k <<" Covariate level " << c << " with cells: "<< cells[c] <<" Included " << cov_levels[c] << " out of " << B_vec[c] << std::endl;
+      }
+    }
 
     // Collect the cells we need to correct
     for (unsigned b = 0, current_covariate = 0; b < B; b++) {

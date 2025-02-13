@@ -255,6 +255,9 @@ RunHarmony.default <- function(
 
         ## Theta scaling
         theta <- theta * (1 - exp(-(N_b / (nclust * tau))^2))
+        if(verbose){
+            message(paste("Thetas:", unique(theta)))
+        }
         
         ## RUN HARMONY
         harmonyObj <- new(harmony)
