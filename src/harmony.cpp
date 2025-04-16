@@ -39,55 +39,8 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
   B = __Phi.n_rows;
   d = __Z.n_rows;
 
-  
-  
-  if (false) {
-    // TODO(Nikos) Sort according to one covariate to optimize
-    // correction steps using submat operations later.
-    Timer t(timers["sorting_elems"]);        
-    orig_index.reserve(N);
-    RSPMAT::const_iterator it =     __Phi.begin();
-    RSPMAT::const_iterator it_end = __Phi.end();
-    batch_indptr = arma::zeros<uvec>(B+1);
-    for (unsigned i=0; it != it_end; ++it, i++)
-    {
-      unsigned int row_idx = it.row(); // Batch
-      unsigned int col_idx = it.col(); // Cell
-      batch_indptr(row_idx+1) += 1; // i+1, indptr
-      orig_index.push_back({row_idx, col_idx});
-      
-      if (col_idx != i) {
-	Rcpp::stop("Misalignment during sorting");
-      }
-    }
-    // Update batch_indptr
-    for (unsigned i=1; i < B+1;++i) {
-      batch_indptr(i) += batch_indptr(i-1);
-    }
     
-    std::sort(orig_index.begin(), orig_index.end(), CellEntryCompare);
-    new_index = arma::uvec(orig_index.size());
-    unsigned i = 0;
-    for (const auto& s : orig_index) {
-      new_index(i++) = s.cell_number;
-    }
-    
-    uvec indices = linspace<uvec>(0, N - 1, N);
-    // Inverse index
-    original_index = arma::uvec(size(indices));
-    original_index.rows(new_index) = indices;
-    Phi_t = SPMAT(indices,
-		  batch_indptr,
-		  VECTYPE(indices.n_rows, arma::fill::ones),
-		  N,
-		  B);
-    Z_orig = conv_to<MATTYPE>::from(__Z.cols(new_index));
-  } else{
-    original_index = linspace<uvec>(0, N - 1, N);
-    Z_orig = conv_to<MATTYPE>::from(__Z);
-  }     
-  
-  
+  Z_orig = conv_to<MATTYPE>::from(__Z);
   Z_corr = arma::normalise(Z_orig, 2, 0);
   
   Phi = conv_to<SPMAT>::from(__Phi);
@@ -744,24 +697,21 @@ void harmony::moe_correct_ridge_cpp() {
 // }
 
 RMAT harmony::getZcorr() {
-  return conv_to<RMAT>::from(Z_corr.cols(original_index));
+  return conv_to<RMAT>::from(Z_corr);
 }
 
 RMAT harmony::getR() {
-  return conv_to<RMAT>::from(R.cols(original_index));
+  return conv_to<RMAT>::from(R);
 }
 
 RMAT harmony::getZorig() {
-  return conv_to<RMAT>::from(Z_orig.cols(original_index));
+  return conv_to<RMAT>::from(Z_orig);
 }
 
 
 RCPP_MODULE(harmony_module) {
   class_<harmony>("harmony")
       .constructor()
-      // .field("Z_corr", &harmony::Z_corr)
-      // .field("Z_orig", &harmony::Z_orig)
-      // .field("Phi", &harmony::Phi)
       // .field("Phi_moe", &harmony::Phi_moe)
       .field("N", &harmony::N)
       .field("B", &harmony::B)

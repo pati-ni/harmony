@@ -17,18 +17,6 @@ RCPP_EXPOSED_CLASS(harmony)
   
 #include "harmony_types.h"
 
-typedef  struct {
-    unsigned batch_id;
-    unsigned cell_number;
-  } CellEntry;
-
-struct
-{
-  bool operator()(const CellEntry& rhs, const CellEntry& lhs) const { return rhs.batch_id < lhs.batch_id;}
-}CellEntryCompare;
-
-
-
 class harmony { 
 public:
   
@@ -65,7 +53,7 @@ public:
   vector<float> objective_kmeans, objective_kmeans_dist, objective_kmeans_entropy, objective_kmeans_cross, objective_harmony;
   vector<int> kmeans_rounds, B_vec, covariate_bounds; // OLD: Kb
   std::vector<arma::uvec>index;
-  arma::uvec batch_sizes, new_index, original_index, batch_indptr;
+  arma::uvec batch_sizes, new_index, batch_indptr;
   
   float block_size, epsilon_kmeans, epsilon_harmony, alpha, batch_proportion_cutoff;
   unsigned int N, K, B, d, max_iter_kmeans, window_size;
@@ -74,7 +62,6 @@ public:
   MATTYPE W, dist_mat, O, E, dir_prior; // N_k, N_kb, N_b, numerator, denominator, C;
   uvec update_order, cells_update;
 
-  std::vector<CellEntry> orig_index;
 
   // flags
   bool ran_setup, ran_init, lambda_estimation,  verbose; // do_merge_R;
