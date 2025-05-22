@@ -22,8 +22,8 @@ harmony::harmony() :
     ran_setup(false),
     ran_init(false),
     lambda_estimation(false),
+    old_diversity_penalty(false),
     verbose(false)
-    
 {}
 
 
@@ -32,7 +32,7 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
                     const RVEC __sigma, const RVEC __theta, const RVEC __lambda, const float __alpha, const int __max_iter_kmeans,
                     const float __epsilon_kmeans, const float __epsilon_harmony,
                     const int __K, const float __block_size,
-                    const std::vector<int>& __B_vec, float __batch_proportion_cutoff, const bool __verbose) {
+                    const std::vector<int>& __B_vec, float __batch_proportion_cutoff, const bool __old_diversity_penalty , const bool __verbose) {
     
   // Algorithm constants
   N = __Z.n_cols;
@@ -154,6 +154,7 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
   theta = conv_to<VECTYPE>::from(__theta);
   max_iter_kmeans = __max_iter_kmeans;
 
+  old_diversity_penalty = __old_diversity_penalty;
   verbose = __verbose;
   
   allocate_buffers();
@@ -210,11 +211,21 @@ void harmony::init_cluster_cpp() {
   ran_init = true;
 }
 
+
+MATTYPE harmony::diversity_penalty(const MATTYPE& E, const MATTYPE& O) {
+  if (old_diversity_penalty) {
+    return (E+1)/(O+1);
+  } else {
+    return ((2 * E) + 1)/(O + E + 1);
+  }
+}
+
+
 void harmony::compute_objective() {
   const float norm_const = 2000/((float)N);
   float kmeans_error = as_scalar(my_accu(R % dist_mat));  
-  float _entropy = as_scalar(my_accu(safe_entropy(R).each_col() % sigma)); // NEW: vector sigma
-  float _cross_entropy = as_scalar(my_accu((R.each_col() % sigma) % ((arma::repmat(theta.t(), K, 1) % log((O + E + 1) / ((2*E) + 1))) * Phi)));
+  float _entropy = as_scalar(my_accu(safe_entropy(R).each_col() % sigma)); // NEW: vector sigma   
+  float _cross_entropy = as_scalar(my_accu((R.each_col() % sigma) % ((arma::repmat(theta.t(), K, 1) % -log(diversity_penalty(E, O))) * Phi)));
 
   // Push back the data
   objective_kmeans.push_back((kmeans_error + _entropy + _cross_entropy) * norm_const);
@@ -383,7 +394,7 @@ int harmony::update_R() {
       Rcells.each_col() /= sigma; // NEW: vector sigma
       Rcells = exp(Rcells);
       Rcells = arma::normalise(Rcells, 1, 0);
-      Rcells = Rcells % (harmony_pow(((2*E) + 1) / (O + E + 1), theta) * Phicells);
+      Rcells = Rcells % (harmony_pow(diversity_penalty(E, O), theta) * Phicells);
       Rcells = arma::normalise(Rcells, 1, 0); // L1 norm columns
     }
 
@@ -765,6 +776,7 @@ RCPP_MODULE(harmony_module) {
       // .field("Phi", &harmony::Phi)
       // .field("Phi_moe", &harmony::Phi_moe)
       .field("N", &harmony::N)
+    .field("old_diversity_penalty", &harmony::old_diversity_penalty)
       .field("B", &harmony::B)
       .field("K", &harmony::K)
       .field("d", &harmony::d)

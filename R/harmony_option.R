@@ -37,7 +37,8 @@ harmony_options <- function(
   max.iter.cluster = 20,
   epsilon.cluster = 1e-3,
   epsilon.harmony = 1e-2,
-  batch.prop.cutoff = 1e-5) {
+  batch.prop.cutoff = 1e-5,
+  old.diversity.penalty = FALSE) {
     
     block.size <- validate_block.size(block.size)
     
@@ -48,7 +49,8 @@ harmony_options <- function(
         max.iter.cluster = max.iter.cluster,
         epsilon.cluster = epsilon.cluster,
         epsilon.harmony = epsilon.harmony,
-        batch.prop.cutoff = batch.prop.cutoff
+        batch.prop.cutoff = batch.prop.cutoff,
+        old.diversity.penalty = old.diversity.penalty
     )
     out <- structure(out, class = "harmony_options")
     return(out)

@@ -89,22 +89,22 @@
 #' head(harmony_object$O) ## batch by cluster co-occurence matrix
 #' 
 RunHarmony.default <- function(
-  data_mat,
-  meta_data,
-  vars_use,
-  theta = NULL,
-  sigma = 0.1,
-  lambda = 1,
-  nclust = NULL,
-  max_iter = 10,
-  early_stop = TRUE,
-  ncores = 1,
-  plot_convergence = FALSE,
-  return_object = FALSE,
-  verbose = TRUE,
-  .options = harmony_options(),
-  ...
-  ) {
+                               data_mat,
+                               meta_data,
+                               vars_use,
+                               theta = NULL,
+                               sigma = 0.1,
+                               lambda = 1,
+                               nclust = NULL,
+                               max_iter = 10,
+                               early_stop = TRUE,
+                               ncores = 1,
+                               plot_convergence = FALSE,
+                               return_object = FALSE,
+                               verbose = TRUE,
+                               .options = harmony_options(),
+                               ...
+                               ) {
     
 
     ## Try to set number of OPENBLAS cores for harmony.
@@ -261,11 +261,12 @@ RunHarmony.default <- function(
         
         ## RUN HARMONY
         harmonyObj <- new(harmony)
-        
+        print(.options)
         harmonyObj$setup(
                        data_mat, phi, sigma, theta, lambda_vec, alpha,
                        max.iter.cluster, epsilon.cluster,
-                       epsilon.harmony, nclust, block.size, B_vec, batch.prop.cutoff, verbose
+                       epsilon.harmony, nclust, block.size, B_vec, batch.prop.cutoff,
+                       .options$old.diversity.penalty, verbose
                    )
 
         

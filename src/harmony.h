@@ -39,7 +39,7 @@ public:
 	     const RVEC __lambda, const float __alpha, const int __max_iter_kmeans,
 	     const float __epsilon_kmeans, const float __epsilon_harmony,
 	     const int __K, const float __block_size, 
-	     const vector<int>& __B_vec, float __batch_proportion_cutoff, const bool __verbose);
+	     const vector<int>& __B_vec, float __batch_proportion_cutoff, const bool __old_diversity_penalty, const bool __verbose);
   
   /* METHODS */
   void moe_correct_ridge_cpp();
@@ -55,6 +55,7 @@ public:
   RMAT getZcorr();
   RMAT getZorig();
   RMAT getR();
+  MATTYPE diversity_penalty(const MATTYPE& E, const MATTYPE& O);
 
   /* FIELDS */
   MATTYPE R, Z_orig, Z_corr, Y;
@@ -70,6 +71,7 @@ public:
   float block_size, epsilon_kmeans, epsilon_harmony, alpha, batch_proportion_cutoff;
   unsigned int N, K, B, d, max_iter_kmeans, window_size;
 
+
   // buffers
   MATTYPE W, dist_mat, O, E, dir_prior; // N_k, N_kb, N_b, numerator, denominator, C;
   uvec update_order, cells_update;
@@ -77,7 +79,7 @@ public:
   std::vector<CellEntry> orig_index;
 
   // flags
-  bool ran_setup, ran_init, lambda_estimation,  verbose; // do_merge_R;
+  bool ran_setup, ran_init, lambda_estimation,  old_diversity_penalty, verbose; // do_merge_R;
   
 };
 
