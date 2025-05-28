@@ -23,6 +23,7 @@ harmony::harmony() :
     ran_init(false),
     lambda_estimation(false),
     old_diversity_penalty(false),
+    batch_centroid(true),
     verbose(false)
 {}
 
@@ -32,7 +33,7 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
                     const RVEC __sigma, const RVEC __theta, const RVEC __lambda, const float __alpha, const int __max_iter_kmeans,
                     const float __epsilon_kmeans, const float __epsilon_harmony,
                     const int __K, const float __block_size,
-                    const std::vector<int>& __B_vec, float __batch_proportion_cutoff, const bool __old_diversity_penalty , const bool __verbose) {
+                    const std::vector<int>& __B_vec, float __batch_proportion_cutoff, const bool __old_diversity_penalty, const bool __batch_centroid, const bool __verbose) {
     
   // Algorithm constants
   N = __Z.n_cols;
@@ -154,7 +155,9 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
   theta = conv_to<VECTYPE>::from(__theta);
   max_iter_kmeans = __max_iter_kmeans;
 
+  
   old_diversity_penalty = __old_diversity_penalty;
+  batch_centroid = __batch_centroid;
   verbose = __verbose;
   
   allocate_buffers();
@@ -283,15 +286,16 @@ int harmony::cluster_cpp() {
 
 
 
-
-  if (objective_harmony.size() != 1) {
+  Z_corr = arma::normalise(Z_corr, 2, 0);
+  
+  if (objective_harmony.size() != 1 && batch_centroid) {
     // We are coming after a correction step and this is a cold start
     // of clustering Estimation Step. Rs are estimated from last
     // iteration's estimation and do not reflect the current Z_corr
     // embeddings. Re-estimate Rs from the new corrected parameters as
     // we did in init_cluster_cpp
     
-    Z_corr = arma::normalise(Z_corr, 2, 0);
+    
     dist_mat = 2 * (1 - Y.t() * Z_corr);  
     R = -dist_mat;
     R.each_col() /= sigma;
@@ -308,9 +312,12 @@ int harmony::cluster_cpp() {
 	  return(-1);
     
       // STEP 1: Update Y (cluster centroids)
-      // Y = arma::normalise(Z_corr * R.t(), 2, 0);
-
-      // dist_mat = 2 * (1 - Y.t() * Z_corr); // Y was changed
+      if (!batch_centroid) {
+	std::cerr << "Using k-means centroids" << std::endl;
+	Y = arma::normalise(Z_corr * R.t(), 2, 0);
+	dist_mat = 2 * (1 - Y.t() * Z_corr); // Y was changed
+      }
+      
               
       // STEP 3: Update R    
       err_status = update_R();

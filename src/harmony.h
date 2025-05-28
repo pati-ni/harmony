@@ -39,7 +39,8 @@ public:
 	     const RVEC __lambda, const float __alpha, const int __max_iter_kmeans,
 	     const float __epsilon_kmeans, const float __epsilon_harmony,
 	     const int __K, const float __block_size, 
-	     const vector<int>& __B_vec, float __batch_proportion_cutoff, const bool __old_diversity_penalty, const bool __verbose);
+	     const vector<int>& __B_vec, float __batch_proportion_cutoff,
+	     const bool __old_diversity_penalty, const bool __batch_centroid, const bool __verbose);
   
   /* METHODS */
   void moe_correct_ridge_cpp();
@@ -79,7 +80,7 @@ public:
   std::vector<CellEntry> orig_index;
 
   // flags
-  bool ran_setup, ran_init, lambda_estimation,  old_diversity_penalty, verbose; // do_merge_R;
+  bool ran_setup, ran_init, lambda_estimation,  old_diversity_penalty, batch_centroid, verbose; // do_merge_R;
   
 };
 

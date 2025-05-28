@@ -266,7 +266,7 @@ RunHarmony.default <- function(
                        data_mat, phi, sigma, theta, lambda_vec, alpha,
                        max.iter.cluster, epsilon.cluster,
                        epsilon.harmony, nclust, block.size, B_vec, batch.prop.cutoff,
-                       .options$old.diversity.penalty, verbose
+                       .options$old.diversity.penalty, .options$batch.centroid, verbose
                    )
 
         

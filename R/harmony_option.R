@@ -38,7 +38,8 @@ harmony_options <- function(
   epsilon.cluster = 1e-3,
   epsilon.harmony = 1e-2,
   batch.prop.cutoff = 1e-5,
-  old.diversity.penalty = FALSE) {
+  old.diversity.penalty = FALSE,
+  batch.centroid = TRUE) {
     
     block.size <- validate_block.size(block.size)
     
@@ -50,7 +51,8 @@ harmony_options <- function(
         epsilon.cluster = epsilon.cluster,
         epsilon.harmony = epsilon.harmony,
         batch.prop.cutoff = batch.prop.cutoff,
-        old.diversity.penalty = old.diversity.penalty
+        old.diversity.penalty = old.diversity.penalty,
+        batch.centroid = batch.centroid
     )
     out <- structure(out, class = "harmony_options")
     return(out)
