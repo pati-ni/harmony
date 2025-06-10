@@ -676,7 +676,22 @@ void harmony::moe_correct_ridge_cpp() {
 
     {
       Timer t(timers["arma_inv"]);
-      inv_cov = arma::inv(Phi_cov);
+      if (B_vec.size() > 1) {
+	inv_cov = arma::inv(Phi_cov);
+      } else {
+	// Phi_cov is an arrowhead compute inverse on the fly
+	Timer t(timers["arma_inv"]);
+	VECTYPE ac = -Phi_cov.row(0).as_col();
+	ac(0) = 1;
+	float b0 = Phi_cov(0, 0);
+	VECTYPE b = 1 / Phi_cov.diag();
+	b(0) = 0;
+	float u = b0 - arma::accu(arma::square(ac) % b);
+	VECTYPE ac_b = (ac) % b;
+	ac_b(0) = 1;
+	inv_cov = (1/u)*(ac_b * ac_b.t());
+	inv_cov.diag() += b;
+      }
     }
 
     // Calculate R-scaled PCs once
