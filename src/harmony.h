@@ -56,6 +56,7 @@ public:
   RMAT getZcorr();
   RMAT getZorig();
   RMAT getR();
+  RMAT getCentroids();
   MATTYPE diversity_penalty(const MATTYPE& E, const MATTYPE& O);
 
   /* FIELDS */
