@@ -752,6 +752,11 @@ RMAT harmony::getR() {
   return conv_to<RMAT>::from(R.cols(original_index));
 }
 
+RMAT harmony::getCentroids() {
+  return conv_to<RMAT>::from(Y);
+}
+
+
 RMAT harmony::getZorig() {
   return conv_to<RMAT>::from(Z_orig.cols(original_index));
 }
@@ -787,6 +792,7 @@ RCPP_MODULE(harmony_module) {
     .method("getZcorr", &harmony::getZcorr)
     .method("getZorig", &harmony::getZorig)
     .method("getR", &harmony::getR)
+    .method("getCentroids", &harmony::getCentroids)
       .method("check_convergence", &harmony::check_convergence)
       .method("setup", &harmony::setup)
       .method("compute_objective", &harmony::compute_objective)
