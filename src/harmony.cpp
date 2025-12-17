@@ -2,11 +2,9 @@
 #include <chrono>
 #include <unordered_map>
 #include <cstring>
-
 #include "harmony.h"
 #include "types.h"
 #include "utils.h"
-
 #include "timer.h"
 
 void print_timers() {  
@@ -39,60 +37,12 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
   B = __Phi.n_rows;
   d = __Z.n_rows;
 
-  
-  
-  if (false) {
-    // TODO(Nikos) Sort according to one covariate to optimize
-    // correction steps using submat operations later.
-    Timer t(timers["sorting_elems"]);        
-    orig_index.reserve(N);
-    RSPMAT::const_iterator it =     __Phi.begin();
-    RSPMAT::const_iterator it_end = __Phi.end();
-    batch_indptr = arma::zeros<uvec>(B+1);
-    for (unsigned i=0; it != it_end; ++it, i++)
-    {
-      unsigned int row_idx = it.row(); // Batch
-      unsigned int col_idx = it.col(); // Cell
-      batch_indptr(row_idx+1) += 1; // i+1, indptr
-      orig_index.push_back({row_idx, col_idx});
-      
-      if (col_idx != i) {
-	Rcpp::stop("Misalignment during sorting");
-      }
-    }
-    // Update batch_indptr
-    for (unsigned i=1; i < B+1;++i) {
-      batch_indptr(i) += batch_indptr(i-1);
-    }
     
-    std::sort(orig_index.begin(), orig_index.end(), CellEntryCompare);
-    new_index = arma::uvec(orig_index.size());
-    unsigned i = 0;
-    for (const auto& s : orig_index) {
-      new_index(i++) = s.cell_number;
-    }
-    
-    uvec indices = linspace<uvec>(0, N - 1, N);
-    // Inverse index
-    original_index = arma::uvec(size(indices));
-    original_index.rows(new_index) = indices;
-    Phi_t = SPMAT(indices,
-		  batch_indptr,
-		  VECTYPE(indices.n_rows, arma::fill::ones),
-		  N,
-		  B);
-    Z_orig = conv_to<MATTYPE>::from(__Z.cols(new_index));
-  } else{
-    original_index = linspace<uvec>(0, N - 1, N);
-    Z_orig = conv_to<MATTYPE>::from(__Z);
-  }     
-  
-  
+  Z_orig = conv_to<MATTYPE>::from(__Z);     
   Z_corr = arma::normalise(Z_orig, 2, 0);
   
   Phi = conv_to<SPMAT>::from(__Phi);
   Phi_t = Phi.t();
-  // Phi = Phi_t.t();
   
   
   // Create index
@@ -148,8 +98,7 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
     std::partial_sum(B_vec.begin(), B_vec.end(), covariate_bounds.begin(), std::plus<unsigned>());
   } else {
     covariate_bounds.push_back(B_vec.front());
-  }
-  
+  }  
   
   theta = conv_to<VECTYPE>::from(__theta);
   max_iter_kmeans = __max_iter_kmeans;
@@ -221,11 +170,6 @@ void harmony::compute_objective() {
   objective_kmeans_dist.push_back(kmeans_error * norm_const);
   objective_kmeans_entropy.push_back(_entropy * norm_const);
   objective_kmeans_cross.push_back(_cross_entropy * norm_const);
-  
-  std::cout << "Objective: \n\t Harmony:\t" << objective_kmeans.back() << std::endl;
-  std::cout << "\t kmeans:\t" << objective_kmeans_dist.back() << std::endl;
-  std::cout << "\t soft-k:\t" << objective_kmeans_entropy.back() << std::endl;
-  std::cout << "\t divers:\t" << objective_kmeans_cross.back() << std::endl;
 
 }
 
@@ -271,15 +215,12 @@ int harmony::cluster_cpp() {
   unsigned iter;
 
 
-
-
   if (objective_harmony.size() != 1) {
     // We are coming after a correction step and this is a cold start
     // of clustering Estimation Step. Rs are estimated from last
     // iteration's estimation and do not reflect the current Z_corr
     // embeddings. Re-estimate Rs from the new corrected parameters as
     // we did in init_cluster_cpp
-    
     Z_corr = arma::normalise(Z_corr, 2, 0);
     dist_mat = 2 * (1 - Y.t() * Z_corr);  
     R = -dist_mat;
@@ -298,7 +239,6 @@ int harmony::cluster_cpp() {
     
       // STEP 1: Update Y (cluster centroids)
       // Y = arma::normalise(Z_corr * R.t(), 2, 0);
-
       // dist_mat = 2 * (1 - Y.t() * Z_corr); // Y was changed
               
       // STEP 3: Update R    
@@ -624,32 +564,6 @@ void harmony::moe_correct_ridge_cpp() {
     SPMAT Phi_Rk = Phi_moe * _Rk;
     delete t1;
     
-    // t1 = new Timer(timers["Phi_Rk_optimized"]);
-    
-    // // https://gitlab.com/conradsnicta/armadillo-code/-/blob/14.0.x/include/armadillo_bits/SpMat_bones.hpp?ref_type=heads#L69
-    
-    // VECTYPE Rk_vals(_Rk.values, _Rk.n_cols);
-    // VECTYPE _Phi_Rk_vals(_Rk.n_cols * (active_covariates + 1));
-    // const unsigned ac = active_covariates + 1;
-    
-    // unsigned n_cells = _Rk.n_cols;
-    // // For each cell we have active_covariates + 1 
-    // for (unsigned i1 = 0; i1 < n_cells; ++i1) {
-    //   for (unsigned i2 = 0; i2 < ac; ++i2) {       
-    // 	_Phi_Rk_vals((i1 * ac) + i2) = Rk_vals(i1);
-    //   }
-    // }
-    // for (unsigned c = 0; c < active_covariates + 1; ++c) {
-    //   _Phi_Rk_vals(arma::span(c * _Rk.n_cols, ((c + 1) * _Rk.n_cols) - 1)) =;
-    // }
-    
-    // SPMAT Phi_Rk2(arma::uvec(Phi_moe.row_indices, Phi_moe.n_nonzero),
-    // 		  arma::uvec(Phi_moe.col_ptrs, Phi_moe.n_cols + 1),
-    // 		  _Phi_Rk_vals, Phi_moe.n_rows, Phi_moe.n_cols, false);
-    
-    // delete t1;
-    
-
     MATTYPE inv_cov, Phi_cov;
     {
       Timer t(timers["Phi_cov"]);
@@ -700,56 +614,21 @@ void harmony::moe_correct_ridge_cpp() {
       delete _Phi_moe_t;
       delete _index;
     }
-
+    
     delete _lambda_mat;
     delete __Rk;
     delete _Z_tmp;
-
   }
-
-
   Y = arma::normalise(Y, 2, 0);
-
-  
   print_timers();
-
-
-
-
 }
 
-
-
-
-// CUBETYPE harmony::moe_ridge_get_betas_cpp() {
-//   CUBETYPE W_cube(B+1, d, K); // rows, cols, slices
-
-//   SPMAT _Rk(N, N);
-//   SPMAT lambda_mat(B + 1, B + 1);
-
-//   if (!lambda_estimation) {
-//     // Set lambda if we have to
-//     lambda_mat.diag() = lambda;
-//   }
-
-//   for (unsigned k = 0; k < K; k++) {
-//       _Rk.diag() = R.row(k);
-//       if (lambda_estimation){
-//         lambda_mat.diag() = find_lambda_cpp(alpha, E.row(k).t());
-//       }
-//       SPMAT Phi_Rk = Phi_moe * _Rk;
-//       W_cube.slice(k) = arma::inv(MATTYPE(Phi_Rk * Phi_moe_t + lambda_mat)) * Phi_Rk * Z_orig.t();
-//   }
-
-//   return W_cube;
-// }
-
 RMAT harmony::getZcorr() {
-  return conv_to<RMAT>::from(Z_corr.cols(original_index));
+  return conv_to<RMAT>::from(Z_corr);
 }
 
 RMAT harmony::getR() {
-  return conv_to<RMAT>::from(R.cols(original_index));
+  return conv_to<RMAT>::from(R);
 }
 
 RMAT harmony::getCentroids() {
@@ -758,49 +637,44 @@ RMAT harmony::getCentroids() {
 
 
 RMAT harmony::getZorig() {
-  return conv_to<RMAT>::from(Z_orig.cols(original_index));
+  return conv_to<RMAT>::from(Z_orig);
 }
 
 
 RCPP_MODULE(harmony_module) {
   class_<harmony>("harmony")
-      .constructor()
-      // .field("Z_corr", &harmony::Z_corr)
-      // .field("Z_orig", &harmony::Z_orig)
-      // .field("Phi", &harmony::Phi)
-      // .field("Phi_moe", &harmony::Phi_moe)
-      .field("N", &harmony::N)
-      .field("B", &harmony::B)
-      .field("K", &harmony::K)
-      .field("d", &harmony::d)
-      .field("O", &harmony::O)
-      .field("E", &harmony::E)
-      .field("Y", &harmony::Y)
-      .field("Pr_b", &harmony::Pr_b)
-      .field("W", &harmony::W)
-      .field("R", &harmony::R)
-      .field("theta", &harmony::theta)
-      .field("sigma", &harmony::sigma)
-      .field("lambda", &harmony::lambda)
-      .field("kmeans_rounds", &harmony::kmeans_rounds)
-      .field("objective_kmeans", &harmony::objective_kmeans)
-      .field("objective_kmeans_dist", &harmony::objective_kmeans_dist)
-      .field("objective_kmeans_entropy", &harmony::objective_kmeans_entropy)
-      .field("objective_kmeans_cross", &harmony::objective_kmeans_cross)    
-      .field("objective_harmony", &harmony::objective_harmony)
-      .field("max_iter_kmeans", &harmony::max_iter_kmeans)
+    .constructor()
+    .field("N", &harmony::N)
+    .field("B", &harmony::B)
+    .field("K", &harmony::K)
+    .field("d", &harmony::d)
+    .field("O", &harmony::O)
+    .field("E", &harmony::E)
+    .field("Y", &harmony::Y)
+    .field("Pr_b", &harmony::Pr_b)
+    .field("B_vec", &harmony::B_vec)
+    .field("alpha", &harmony::alpha)
+    .field("W", &harmony::W)
+    .field("R", &harmony::R)
+    .field("theta", &harmony::theta)
+    .field("sigma", &harmony::sigma)
+    .field("lambda", &harmony::lambda)
+    .field("kmeans_rounds", &harmony::kmeans_rounds)
+    .field("objective_kmeans", &harmony::objective_kmeans)
+    .field("objective_kmeans_dist", &harmony::objective_kmeans_dist)
+    .field("objective_kmeans_entropy", &harmony::objective_kmeans_entropy)
+    .field("objective_kmeans_cross", &harmony::objective_kmeans_cross)    
+    .field("objective_harmony", &harmony::objective_harmony)
+    .field("max_iter_kmeans", &harmony::max_iter_kmeans)
     .method("getZcorr", &harmony::getZcorr)
     .method("getZorig", &harmony::getZorig)
     .method("getR", &harmony::getR)
     .method("getCentroids", &harmony::getCentroids)
-      .method("check_convergence", &harmony::check_convergence)
-      .method("setup", &harmony::setup)
-      .method("compute_objective", &harmony::compute_objective)
-      .method("init_cluster_cpp", &harmony::init_cluster_cpp)
-      .method("cluster_cpp", &harmony::cluster_cpp)	  
-      .method("moe_correct_ridge_cpp", &harmony::moe_correct_ridge_cpp)
-      // .method("moe_ridge_get_betas_cpp", &harmony::moe_ridge_get_betas_cpp)
-      .field("B_vec", &harmony::B_vec)
-      .field("alpha", &harmony::alpha)
-      ;
+    .method("check_convergence", &harmony::check_convergence)
+    .method("setup", &harmony::setup)
+    .method("compute_objective", &harmony::compute_objective)
+    .method("init_cluster_cpp", &harmony::init_cluster_cpp)
+    .method("cluster_cpp", &harmony::cluster_cpp)	  
+    .method("moe_correct_ridge_cpp", &harmony::moe_correct_ridge_cpp)
+    ;
 }
