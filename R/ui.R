@@ -259,6 +259,11 @@ RunHarmony.default <- function(
             message(paste("Thetas:", unique(theta)))
         }
         
+        ## Hacky workaround to adress un-initialized seeds, RcppArmadillo #438
+        if (!exists(".Random.seed")) {
+            set.seed(NULL)
+        }
+
         ## RUN HARMONY
         harmonyObj <- new(harmony)
         
