@@ -34,7 +34,7 @@ harmony_options <- function(
   alpha = 0.2,
   tau = 0,
   block.size = 0.05,
-  max.iter.cluster = 20,
+  max.iter.cluster = 4,
   epsilon.cluster = 1e-3,
   epsilon.harmony = 1e-2,
   batch.prop.cutoff = 1e-5) {
