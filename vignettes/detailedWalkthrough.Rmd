@@ -417,7 +417,7 @@ Now let's re-assign cells to cluster centroids. We did this above, when we assig
 In the algorithm, this assignment is defined by 
 
 <center>
-$R_{ki} \propto \exp(\frac{-(2(1 - Y^TZ))}{\sigma}) (\frac{E}{O})^\theta \phi$
+$R_{ki} \propto \exp(\frac{-(2(1 - Y^TZ))}{\sigma}) (\frac{E+1}{O+E+1})^\theta \phi$
 </center>
 
 Let's see what this looks like in code. Then we'll break down the formula to see what it does. 
@@ -439,7 +439,7 @@ with(harmonyObj, {
 
 So how does the formula we used above help to create more diverse cluster assignment? 
 
-The diversity penalty is encoded in the new term: $(\frac{E}{O})^\theta \phi$. This has some familiar data structures: $O$ for observed counts, $E$ for expected counts, and $\phi$ for the design matrix. $\theta$ is a new term. $\theta$ decides how much weight to give diversity versus distance to cluster centroids. 
+The diversity penalty is encoded in the new term: $(\frac{E+1}{O+E+1})^\theta \phi$. This has some familiar data structures: $O$ for observed counts, $E$ for expected counts, and $\phi$ for the design matrix. $\theta$ is a new term. $\theta$ decides how much weight to give diversity versus distance to cluster centroids. 
 
 With $\theta=0$, there is no penalty and each cluster gets a score of 1. 
 
@@ -447,7 +447,7 @@ With $\theta=0$, there is no penalty and each cluster gets a score of 1.
 ```{r}
 ## with theta = 0
 with(harmonyObj, {
-    (E / O) ^ 0
+    ((E+1) / (O+E+1)) ^ 0
 })
 ```
 
@@ -459,7 +459,7 @@ As we increase $\theta$, let's see what happens (shown below). Recall that in cl
 ```{r}
 ## with theta = 1
 with(harmonyObj, {
-    round((E / O) ^ 1, 2)
+    round(((E+1) / (O+E+1)) ^ 1, 2)
 })
 
 ```
@@ -472,7 +472,7 @@ We should always be wary of setting $\theta$ too high, since the diversity score
 ```{r}
 ## as theta approach infinity
 with(harmonyObj, {
-    round((E / O) ^ 1e6, 2)
+    round(((E+1) / (O+E+1)) ^ 1e6, 2)
 })
 
 ```
