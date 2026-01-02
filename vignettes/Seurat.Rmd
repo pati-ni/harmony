@@ -41,7 +41,7 @@ For this demo, we will be aligning two groups of PBMCs [Kang et al., 2017](https
 ```
 
 
-## Generate SeuratObject
+## Create SeuratObject
 
 ```{r}
 ## Source required data
@@ -102,7 +102,7 @@ pbmc <- pbmc %>%
     RunPCA(features = VariableFeatures(pbmc), npcs = 20, verbose = FALSE)
 ```
 
-## Perform an integrated analysis
+## Perform an integrated analysis using harmony
 
 To run harmony on Seurat object after it has been normalized, only one argument needs to be specified which contains the batch covariate located in the metadata. For this vignette, further parameters are specified to align the dataset but the minimum parameters are shown in the snippet below:
 
@@ -123,7 +123,7 @@ pbmc <- pbmc %>%
 
 
 
-### Harmony API parameters on Seurat objects
+# Harmony API parameters on Seurat objects
 
 `RunHarmony` has several parameters accessible to users which are outlined below.
 
@@ -210,7 +210,7 @@ Option that plots the convergence plot after the execution of the algorithm. By 
 harmony.embeddings <- Embeddings(pbmc, reduction = "harmony")
 ```
 
-### Inspection of the modalities
+#Visualize harmony results
 
 After Harmony integration, we should inspect the quality of the harmonization and contrast it with the unharmonized algorithm input. Ideally, cells from different conditions will align along the Harmonized PCs. If they are not, you could increase the *theta* value above to force a more aggressive fit of the dataset and rerun the workflow.
 
