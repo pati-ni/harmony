@@ -370,7 +370,7 @@ void harmony::moe_correct_ridge_cpp() {
     // Estimate which covariates have sufficient support and need to
     // be corrected
     for (unsigned b = 0, current_covariate = 0; b < B; b++) {
-      // Determine covariate of factor
+      // Determine covariate of factor (assumes that for each covariate the levels are sorted into blocks)
       if ((current_covariate < covariate_bounds.size()) && !(b < covariate_bounds[current_covariate])) {
 	current_covariate++;
       }
@@ -382,7 +382,7 @@ void harmony::moe_correct_ridge_cpp() {
 	cells[current_covariate] += O(k,b);
       }
     }
-    if(verbose){
+    if (verbose) {
       for (unsigned c =0; c < B_vec.size(); ++c ) {
 	std::cout << "Cluster k:" << k <<" Covariate level " << c << " with cells: "<< cells[c] <<" Included " << cov_levels[c] << " out of " << B_vec[c] << std::endl;
       }
@@ -421,7 +421,7 @@ void harmony::moe_correct_ridge_cpp() {
     unsigned PhiNonZero = 0;
     
     // Drop unused batches
-    if (keep.size() == B) {
+    if ((keep.size() == B)) {
       // std::cout << "Normal pass of the data " << std::endl;
       // Avoid expensive copy, in this case we do not delete the
       // pointer as it is handled by the object lifetime
@@ -517,11 +517,11 @@ void harmony::moe_correct_ridge_cpp() {
 	}
 	{
 	  Timer t(timers["subset_overhead_buffers_Phi"]);
-	_Phi_moe_t = new SPMAT(rowind_new,
-			       indptr_new,
-			       VECTYPE(rowind_new.n_elem, arma::fill::ones),
-			       keep_cols.n_elem,
-			       keep.size() + 1);
+	  _Phi_moe_t = new SPMAT(rowind_new,
+				 indptr_new,
+				 VECTYPE(rowind_new.n_elem, arma::fill::ones),
+				 keep_cols.n_elem,
+				 keep.size() + 1);
 	}
 	{
 	  Timer t(timers["subset_overhead_buffers_t()"]);
@@ -576,7 +576,6 @@ void harmony::moe_correct_ridge_cpp() {
 	inv_cov = arma::inv(Phi_cov);
       } else {
 	// Phi_cov is an arrowhead compute inverse on the fly
-	Timer t(timers["arma_inv"]);
 	VECTYPE ac = -Phi_cov.row(0).as_col();
 	ac(0) = 1;
 	float b0 = Phi_cov(0, 0);
