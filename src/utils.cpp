@@ -10,7 +10,7 @@
 MATTYPE initialize_centroids(const MATTYPE& X, const unsigned int K, bool verbose) {
   // K-means++ centroid initialization
   VECTYPE random_seeds(K, arma::fill::randu);
-  arma::uvec indices = arma::conv_to<arma::uvec>::from(round(random_seeds * X.n_cols));
+  arma::uvec indices = arma::conv_to<arma::uvec>::from(arma::floor(random_seeds * X.n_cols));
   
   MATTYPE Y(X.cols(indices));    
   if (verbose) {

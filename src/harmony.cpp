@@ -27,7 +27,7 @@ harmony::harmony() :
 
 
 void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
-                    const RVEC __sigma, const RVEC __theta, const RVEC __lambda, const float __alpha, const int __max_iter_kmeans,
+                    const float __sigma_scale, const RVEC __theta, const RVEC __lambda, const float __alpha, const int __max_iter_kmeans,
                     const float __epsilon_kmeans, const float __epsilon_harmony,
                     const int __K, const float __block_size,
                     const std::vector<int>& __B_vec, float __batch_proportion_cutoff, const bool __verbose) {
@@ -78,7 +78,7 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
     lambda = conv_to<VECTYPE>::from(__lambda);
   }
   B_vec = __B_vec;
-  sigma = conv_to<VECTYPE>::from(__sigma);
+  sigma_scale = __sigma_scale;
 
   if(__Z.n_cols < 6) {
     std::string error_message = "Refusing to run with less than 6 cells";
@@ -136,19 +136,26 @@ void harmony::init_cluster_cpp() {
   
   Y = kmeans_centers(Z_corr, K, verbose);
 
-  // Cosine normalization of data centrods
+  // Cosine normalization of data centroids
   Y = arma::normalise(Y, 2, 0);
 
-  // (2) ASSIGN CLUSTER PROBABILITIES
-  // using a nice property of cosine distance,
-  // compute squared distance directly with cross product
-  dist_mat = 2 * (1 - Y.t() * Z_corr);
-  
-  R = -dist_mat;
-  R.each_col() /= sigma;
-  R = exp(R);
+  // (2) INITIALISE sigma (K×d) to a fixed value
+  sigma = ones<MATTYPE>(K, d);
+
+  // (3) ASSIGN CLUSTER PROBABILITIES via Mahalanobis distance
+  // dist[k,i] = sum_j (Z[j,i] - Y[j,k])^2 / (sigma_scale * sigma[k,j])
+  for (unsigned k = 0; k < K; k++) {
+    MATTYPE diff = Z_corr;
+    diff.each_col() -= Y.col(k);
+    diff.each_col() %= (1.0f / sqrt(sigma.row(k))).t();
+    dist_mat.row(k) = sum(square(diff), 0);
+  }
+
+  R = exp(-sigma_scale/dist_mat);
   R.each_row() /= sum(R, 0);
-  
+  Rcpp::Rcout << "[DEBUG init] R: min=" << R.min() << " max=" << R.max()
+              << " nan=" << arma::accu(arma::find_nonfinite(R)) << std::endl;
+
   // (3) BATCH DIVERSITY STATISTICS
   E = sum(R, 1) * Pr_b.t();
   O = R * Phi_t;
@@ -161,9 +168,10 @@ void harmony::init_cluster_cpp() {
 
 void harmony::compute_objective() {
   const float norm_const = 2000/((float)N);
-  float kmeans_error = as_scalar(my_accu(R % dist_mat));  
-  float _entropy = as_scalar(my_accu(safe_entropy(R).each_col() % sigma)); // NEW: vector sigma
-  float _cross_entropy = as_scalar(my_accu((R.each_col() % sigma) % ((arma::repmat(theta.t(), K, 1) % log((O + E + 1) / ((2*E) + 1))) * Phi)));
+  VECTYPE sigma_ldet = sum(log(sigma_scale * sigma), 1); // K×1: log-det of scaled diagonal covariance
+  float kmeans_error = as_scalar(my_accu(R % dist_mat));
+  float _entropy = as_scalar(my_accu(safe_entropy(R).each_col() % sigma_ldet));
+  float _cross_entropy = as_scalar(my_accu((R.each_col() % sigma_ldet) % ((arma::repmat(theta.t(), K, 1) % log((O + E + 1) / ((2*E) + 1))) * Phi)));
 
   // Push back the data
   objective_kmeans.push_back((kmeans_error + _entropy + _cross_entropy) * norm_const);
@@ -222,10 +230,13 @@ int harmony::cluster_cpp() {
     // embeddings. Re-estimate Rs from the new corrected parameters as
     // we did in init_cluster_cpp
     Z_corr = arma::normalise(Z_corr, 2, 0);
-    dist_mat = 2 * (1 - Y.t() * Z_corr);  
-    R = -dist_mat;
-    R.each_col() /= sigma;
-    R = exp(R);
+    for (unsigned k = 0; k < K; k++) {
+      MATTYPE diff = Z_corr;
+      diff.each_col() -= Y.col(k);
+      diff.each_col() %= (1.0f / sqrt(sigma_scale * sigma.row(k))).t();
+      dist_mat.row(k) = sum(square(diff), 0);
+    }
+    R = exp(-dist_mat);
     R.each_row() /= sum(R, 0);
     E = sum(R, 1) * Pr_b.t();
     O = R * Phi_t;
@@ -319,9 +330,7 @@ int harmony::update_R() {
     // Step 2: recompute R for removed cells
     {
       Timer t(timers["Rcells_update"]);
-      Rcells = -dist_matcells;
-      Rcells.each_col() /= sigma; // NEW: vector sigma
-      Rcells = exp(Rcells);
+      Rcells = exp(-dist_matcells);
       Rcells = arma::normalise(Rcells, 1, 0);
       Rcells = Rcells % (harmony_pow(((2*E) + 1) / (O + E + 1), theta) * Phicells);
       Rcells = arma::normalise(Rcells, 1, 0); // L1 norm columns
@@ -672,6 +681,7 @@ RCPP_MODULE(harmony_module) {
     .field("R", &harmony::R)
     .field("theta", &harmony::theta)
     .field("sigma", &harmony::sigma)
+    .field("sigma_scale", &harmony::sigma_scale)
     .field("lambda", &harmony::lambda)
     .field("kmeans_rounds", &harmony::kmeans_rounds)
     .field("objective_kmeans", &harmony::objective_kmeans)

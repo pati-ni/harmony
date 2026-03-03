@@ -199,9 +199,9 @@ RunHarmony.default <- function(
             stop('Please specify theta for each variable')
         }
         
-        ## determine sigma if it is a scalar
-        if (length(sigma) == 1 & nclust > 1) {
-            sigma <- rep(sigma, nclust)
+        ## sigma is a scalar hyperparameter passed to C++ as sigma_scale
+        if (!is.numeric(sigma) || length(sigma) != 1) {
+            stop('sigma must be a numeric scalar')
         }
         
 

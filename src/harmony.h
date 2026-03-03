@@ -35,10 +35,10 @@ public:
   harmony();
   
   void setup(const RMAT& __Z, const RSPMAT& __Phi,
-	     const RVEC __sigma, const RVEC __theta,
+	     const float __sigma_scale, const RVEC __theta,
 	     const RVEC __lambda, const float __alpha, const int __max_iter_kmeans,
 	     const float __epsilon_kmeans, const float __epsilon_harmony,
-	     const int __K, const float __block_size, 
+	     const int __K, const float __block_size,
 	     const vector<int>& __B_vec, float __batch_proportion_cutoff, const bool __verbose);
   
   /* METHODS */
@@ -61,7 +61,9 @@ public:
   /* FIELDS */
   MATTYPE R, Z_orig, Z_corr, Y;
   SPMAT Phi, Phi_moe, Phi_moe_t, Phi_t, Rk;
-  VECTYPE Pr_b, theta, N_b, sigma, lambda;
+  VECTYPE Pr_b, theta, N_b, lambda;
+  MATTYPE sigma;     // K×d: per-cluster per-dimension variance, estimated from data
+  float sigma_scale; // scalar hyperparameter that globally scales sigma
 
   // auxilary data structures
   vector<float> objective_kmeans, objective_kmeans_dist, objective_kmeans_entropy, objective_kmeans_cross, objective_harmony;
