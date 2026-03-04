@@ -39,7 +39,8 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
 
     
   Z_orig = conv_to<MATTYPE>::from(__Z);     
-  Z_corr = arma::normalise(Z_orig, 2, 0);
+  // Z_corr = arma::normalise(Z_orig, 2, 0);
+  Z_corr = Z_orig;
   
   Phi = conv_to<SPMAT>::from(__Phi);
   Phi_t = Phi.t();
@@ -136,23 +137,97 @@ void harmony::init_cluster_cpp() {
   
   Y = kmeans_centers(Z_corr, K, verbose);
 
-  // Cosine normalization of data centroids
-  Y = arma::normalise(Y, 2, 0);
+  sigma = calculate_variance(Z_corr,Y, K);
+  sigma *=sigma_scale;
+  {
+    arma::gmm_diag model;
+    model.set_params(
+		     conv_to<arma::mat>::from(Y),              // means:  d×K		    
+		     conv_to<arma::mat>::from(sigma.t()),  // dcovs: d×K (sigma is K×d)
+		     arma::ones<arma::rowvec>(K) / K           // hefts:  uniform mixing weights
+		     );
+    model.learn(
+      conv_to<arma::mat>::from(Z_corr),         // data:   d×N
+      K, arma::maha_dist, arma::keep_existing,
+      0,      // km_iter: skip k-means, preserve initial means
+      5,      // em_iter
+      1e-8,   // var_floor
+      verbose
+    );
+    
+    Y     = conv_to<MATTYPE>::from(model.means);      // d×K  updated centroids
+    sigma = conv_to<MATTYPE>::from(model.dcovs.t()); // K×d  per-cluster variances
+    Rcpp::Rcout << "[DEBUG init] sigma: min=" << sigma.min() << " max=" << sigma.max() << std::endl;
+    Rcpp::Rcout << sigma << std::endl;
+  }
 
-  // (2) INITIALISE sigma (K×d) to a fixed value
-  sigma = ones<MATTYPE>(K, d);
+  // Detect and revive dead clusters stuck at the origin
+  VECTYPE data_norms(arma::sum(arma::square(Z_corr)).t());
+  // arma::vec P = { 0.1 };
+  float ref_norm = as_scalar(arma::quantile(conv_to<arma::vec>::from(data_norms), arma::vec{0.02}));
+  // float ref_norm = as_scalar(arma::quantile(conv_to<arma::vec>::from(data_norms), P));
+  // float ref_norm = arma::median(data_norms);
+  while(true) {
+    VECTYPE Y_norms(arma::sum(arma::square(Y)).t());    
+    Rcpp::Rcout << "[DEBUG init] ref_norm " << ref_norm << " clusters: " << Y_norms << std::endl;
+    arma::uvec dead = arma::find(Y_norms < ref_norm);
+    if (dead.n_elem > 0) {
+      Rcpp::Rcout << "[DEBUG init] " << dead.n_elem
+                  << " dead clusters detected, reinitialising from random cells" << std::endl;
+      arma::uvec resampled = arma::randperm(N, dead.n_elem);
+      for (unsigned i = 0; i < dead.n_elem; i++)
+        Y.col(dead(i)) = Z_corr.col(resampled(i));
+    } else{
+      break;
+    } 
 
+
+    arma::kmeans(Y, Z_corr, K, arma::keep_existing, 2, verbose);
+    sigma = calculate_variance(Z_corr,Y, K);
+    sigma *= sigma_scale;
+  
+  
+    arma::gmm_diag model;
+    model.set_params(
+		     conv_to<arma::mat>::from(Y),              // means:  d×K
+		     conv_to<arma::mat>::from(sigma.t()),  // dcovs: d×K (sigma is K×d)
+		     arma::ones<arma::rowvec>(K) / K           // hefts:  uniform mixing weights
+		     );
+    model.learn(
+		conv_to<arma::mat>::from(Z_corr),         // data:   d×N
+		K, arma::maha_dist, arma::keep_existing,
+		9,      // km_iter: skip k-means, preserve initial means
+		5,      // em_iter
+		1e-8,   // var_floor
+		verbose
+		);
+
+    Y     = conv_to<MATTYPE>::from(model.means);      // d×K  updated centroids
+    sigma = conv_to<MATTYPE>::from(model.dcovs.t()); // K×d  per-cluster variances
+    Rcpp::Rcout << "[DEBUG init] sigma (hard-assign): min=" << sigma.min()
+                << " max=" << sigma.max() << std::endl;
+  }
+
+  // sigma *= sigma_scale;
+  
   // (3) ASSIGN CLUSTER PROBABILITIES via Mahalanobis distance
-  // dist[k,i] = sum_j (Z[j,i] - Y[j,k])^2 / (sigma_scale * sigma[k,j])
   for (unsigned k = 0; k < K; k++) {
     MATTYPE diff = Z_corr;
     diff.each_col() -= Y.col(k);
     diff.each_col() %= (1.0f / sqrt(sigma.row(k))).t();
-    dist_mat.row(k) = sum(square(diff), 0);
+    dist_mat.row(k) = arma::sqrt(sum(square(diff), 0));
   }
-
-  R = exp(-sigma_scale/dist_mat);
+  
+  Rcpp::Rcout << "[DEBUG init] dist_mat: min=" << dist_mat.min() << " max=" << dist_mat.max()
+              << " nan=" << arma::accu(arma::find_nonfinite(dist_mat)) << std::endl;
+  R = exp(-dist_mat);
+  Rcpp::Rcout << "[DEBUG after exp init] R: min=" << R.min() << " max=" << R.max()
+              << " nan=" << arma::accu(arma::find_nonfinite(R)) << std::endl;
+  // Rcpp::Rcout << "[DEBUG sum(R)] sum(R): min=" << find(arma::max(R, 0) < 0.05) << " max=" << sum(R,0).max()  << std::endl;
+  R = arma::square(R); // Regularization
   R.each_row() /= sum(R, 0);
+  
+  
   Rcpp::Rcout << "[DEBUG init] R: min=" << R.min() << " max=" << R.max()
               << " nan=" << arma::accu(arma::find_nonfinite(R)) << std::endl;
 
@@ -168,8 +243,16 @@ void harmony::init_cluster_cpp() {
 
 void harmony::compute_objective() {
   const float norm_const = 2000/((float)N);
-  VECTYPE sigma_ldet = sum(log(sigma_scale * sigma), 1); // K×1: log-det of scaled diagonal covariance
-  float kmeans_error = as_scalar(my_accu(R % dist_mat));
+
+  uword R_nan = arma::accu(arma::find_nonfinite(R));
+  if (R_nan > 0)
+    Rcpp::Rcout << "[DEBUG obj] R has " << R_nan << " NaN/Inf: min=" << R.min()
+                << " max=" << R.max()
+                << " colSums min=" << arma::min(arma::sum(R, 0))
+                << " max=" << arma::max(arma::sum(R, 0)) << std::endl;
+
+  VECTYPE sigma_ldet = arma::sum(sigma,1); // trace of covariance of clusters
+  float kmeans_error = as_scalar(my_accu(R % (dist_mat.each_col() % sigma_ldet)));
   float _entropy = as_scalar(my_accu(safe_entropy(R).each_col() % sigma_ldet));
   float _cross_entropy = as_scalar(my_accu((R.each_col() % sigma_ldet) % ((arma::repmat(theta.t(), K, 1) % log((O + E + 1) / ((2*E) + 1))) * Phi)));
 
@@ -229,14 +312,18 @@ int harmony::cluster_cpp() {
     // iteration's estimation and do not reflect the current Z_corr
     // embeddings. Re-estimate Rs from the new corrected parameters as
     // we did in init_cluster_cpp
-    Z_corr = arma::normalise(Z_corr, 2, 0);
+    // Z_corr = arma::normalise(Z_corr, 2, 0);
     for (unsigned k = 0; k < K; k++) {
       MATTYPE diff = Z_corr;
       diff.each_col() -= Y.col(k);
-      diff.each_col() %= (1.0f / sqrt(sigma_scale * sigma.row(k))).t();
-      dist_mat.row(k) = sum(square(diff), 0);
+      diff.each_col() %= (1.0f / sqrt(sigma.row(k))).t();
+      dist_mat.row(k) = arma::sqrt(sum(square(diff), 0));
     }
+    // dist_mat /= dist_mat.max() / 50;
+    Rcpp::Rcout << "[DEBUG cold-start] dist_mat: min=" << dist_mat.min() << " max=" << dist_mat.max()
+                << " nan=" << arma::accu(arma::find_nonfinite(dist_mat)) << std::endl;
     R = exp(-dist_mat);
+    R = arma::square(R); // Regularization
     R.each_row() /= sum(R, 0);
     E = sum(R, 1) * Pr_b.t();
     O = R * Phi_t;
@@ -331,6 +418,7 @@ int harmony::update_R() {
     {
       Timer t(timers["Rcells_update"]);
       Rcells = exp(-dist_matcells);
+      Rcells = arma::square(Rcells);
       Rcells = arma::normalise(Rcells, 1, 0);
       Rcells = Rcells % (harmony_pow(((2*E) + 1) / (O + E + 1), theta) * Phicells);
       Rcells = arma::normalise(Rcells, 1, 0); // L1 norm columns
@@ -568,7 +656,7 @@ void harmony::moe_correct_ridge_cpp() {
 
     Timer t(timers["correct_ridge_loop"]);        
 
-    
+    // _Rk /= _Rk.max();
     Timer *t1 = new Timer(timers["Phi_Rk"]);
     SPMAT Phi_Rk = Phi_moe * _Rk;
     delete t1;
@@ -598,9 +686,13 @@ void harmony::moe_correct_ridge_cpp() {
       }
     }
 
+    VECTYPE scaler = sigma.row(k).t();
+    scaler /= scaler;
+    
     // Calculate R-scaled PCs once
     {
       Timer t(timers["Z_tmp"]);
+      Z_tmp = Z_tmp.each_col() % (1/scaler);
       Z_tmp = Z_tmp.each_row() % VECTYPE(_Rk.diag()).as_row();
     }
 
@@ -610,7 +702,7 @@ void harmony::moe_correct_ridge_cpp() {
       Timer t(timers["Z_intercept"]);
       W = inv_cov.unsafe_col(0) * sum(Z_tmp, 1).t();
     }
-
+    
     // Calculate betas by calculating each batch contribution
     {
       Timer t(timers["batch_exprod"]);
@@ -619,11 +711,12 @@ void harmony::moe_correct_ridge_cpp() {
 	W += inv_cov.unsafe_col(b+1) * sum(Z_tmp.cols(index[b]), 1).t();
       }
     }
-    Y.col(k) = W.row(0).t(); // update centroids
+    Y.col(k) = W.row(0).t() % scaler; // update centroids
     W.row(0).zeros(); // do not remove the intercept
-
+    // Rcpp::Rcout << W << std::endl;
     {
       Timer t(timers["update_Zcorr"]);
+      W.each_row() %=  scaler.t();
       Z_corr -= W.t() * Phi_Rk;
     }
     
@@ -642,8 +735,8 @@ void harmony::moe_correct_ridge_cpp() {
     delete __Rk;
     delete _Z_tmp;
   }
-  Y = arma::normalise(Y, 2, 0);
-  print_timers();
+  // Y = arma::normalise(Y, 2, 0);
+  // print_timers();
 }
 
 RMAT harmony::getZcorr() {

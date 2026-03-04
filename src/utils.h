@@ -4,6 +4,9 @@
 
 MATTYPE kmeans_centers(const MATTYPE& X, const unsigned int K, bool verbose);
 
+
+MATTYPE calculate_variance(const MATTYPE& X, const MATTYPE& Y, int K);
+
 MATTYPE safe_entropy(const MATTYPE& X);
 
 MATTYPE harmony_pow(MATTYPE A, const VECTYPE& T);

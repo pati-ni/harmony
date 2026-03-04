@@ -63,6 +63,34 @@ MATTYPE kmeans_centers(const MATTYPE& X, const unsigned int K, bool verbose) {
 }
 
 
+
+MATTYPE calculate_variance(const MATTYPE& X, const MATTYPE& Y, int K) {
+  MATTYPE sigma = arma::zeros<MATTYPE>(K, X.n_rows);
+  // Hard-assign each cell to its nearest centroid
+  arma::urowvec assignments(X.n_cols);
+  for (unsigned i = 0; i < X.n_cols; i++) {
+    VECTYPE dists(K);
+    for (unsigned k = 0; k < K; k++)
+      dists(k) = arma::norm(X.col(i) - Y.col(k), 2);
+    assignments(i) = dists.index_min();
+  }
+
+  // Per cluster: biased per-dimension variance from assigned cells
+  for (unsigned k = 0; k < K; k++) {
+    arma::uvec cells = arma::find(assignments == k);
+    if (cells.n_elem < 2) {
+      Rcpp::Rcout << "[DEBUG init] error small cluster" << std::endl;
+      continue;
+    }
+    MATTYPE X_k    = X.cols(cells);
+    VECTYPE mean_k = arma::mean(X_k, 1);
+    VECTYPE var_k  = arma::mean(arma::square(X_k), 1) - arma::square(mean_k);
+    sigma.row(k)   = var_k.t();
+  }
+  return sigma;
+}
+
+
 float my_accu(const MATTYPE& X) {
   auto* X_mem = X.memptr();
   float sum=0;
