@@ -23,8 +23,7 @@ MATTYPE initialize_centroids(const MATTYPE& X, const unsigned int K, bool verbos
   // k-means++
   for (unsigned int i = 0; i < K; i++) {
     p.increment();
-    
-    VECTYPE distances = arma::abs((2* (1 - Y.col(i).t() * X)).as_col());    
+    VECTYPE distances = arma::sqrt(arma::sum(arma::square(X.each_col() - Y.col(i))).t());
     VECTYPE random_numbers(size(distances), arma::fill::randu);
     
     // Weighted Random Sampling, sample from different expontential

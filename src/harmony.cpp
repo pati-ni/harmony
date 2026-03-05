@@ -158,7 +158,6 @@ void harmony::init_cluster_cpp() {
     Y     = conv_to<MATTYPE>::from(model.means);      // d×K  updated centroids
     sigma = conv_to<MATTYPE>::from(model.dcovs.t()); // K×d  per-cluster variances
     Rcpp::Rcout << "[DEBUG init] sigma: min=" << sigma.min() << " max=" << sigma.max() << std::endl;
-    Rcpp::Rcout << sigma << std::endl;
   }
 
   // Detect and revive dead clusters stuck at the origin
@@ -167,19 +166,22 @@ void harmony::init_cluster_cpp() {
   float ref_norm = as_scalar(arma::quantile(conv_to<arma::vec>::from(data_norms), arma::vec{0.02}));
   // float ref_norm = as_scalar(arma::quantile(conv_to<arma::vec>::from(data_norms), P));
   // float ref_norm = arma::median(data_norms);
-  while(true) {
-    VECTYPE Y_norms(arma::sum(arma::square(Y)).t());    
-    Rcpp::Rcout << "[DEBUG init] ref_norm " << ref_norm << " clusters: " << Y_norms << std::endl;
-    arma::uvec dead = arma::find(Y_norms < ref_norm);
-    if (dead.n_elem > 0) {
-      Rcpp::Rcout << "[DEBUG init] " << dead.n_elem
-                  << " dead clusters detected, reinitialising from random cells" << std::endl;
-      arma::uvec resampled = arma::randperm(N, dead.n_elem);
-      for (unsigned i = 0; i < dead.n_elem; i++)
-        Y.col(dead(i)) = Z_corr.col(resampled(i));
-    } else{
-      break;
-    } 
+  while(false) {
+    VECTYPE Y_norms(arma::sum(arma::square(Y)).t());
+    arma::uvec live = arma::find(Y_norms >= ref_norm);
+    if (live.n_elem == K) break;  // no dead clusters
+
+    unsigned K_new = live.n_elem;
+    Rcpp::Rcout << "[DEBUG init] Dropping " << K - K_new
+                << " dead clusters, K: " << K << " -> " << K_new << std::endl;
+    Y     = Y.cols(live);
+    sigma = sigma.rows(live);
+    K     = K_new;
+
+    // Resize K-dependent buffers
+    dist_mat = zeros<MATTYPE>(K, N);
+    O        = zeros<MATTYPE>(K, B);
+    E        = zeros<MATTYPE>(K, B);
 
 
     arma::kmeans(Y, Z_corr, K, arma::keep_existing, 2, verbose);
@@ -196,8 +198,8 @@ void harmony::init_cluster_cpp() {
     model.learn(
 		conv_to<arma::mat>::from(Z_corr),         // data:   d×N
 		K, arma::maha_dist, arma::keep_existing,
-		9,      // km_iter: skip k-means, preserve initial means
-		5,      // em_iter
+		3,      // km_iter: skip k-means, preserve initial means
+		2,      // em_iter
 		1e-8,   // var_floor
 		verbose
 		);
@@ -215,16 +217,20 @@ void harmony::init_cluster_cpp() {
     MATTYPE diff = Z_corr;
     diff.each_col() -= Y.col(k);
     diff.each_col() %= (1.0f / sqrt(sigma.row(k))).t();
-    dist_mat.row(k) = arma::sqrt(sum(square(diff), 0));
+    dist_mat.row(k) = sum(square(diff), 0); // leave this 
   }
   
-  Rcpp::Rcout << "[DEBUG init] dist_mat: min=" << dist_mat.min() << " max=" << dist_mat.max()
-              << " nan=" << arma::accu(arma::find_nonfinite(dist_mat)) << std::endl;
+  {
+    arma::vec dv = arma::conv_to<arma::vec>::from(arma::vectorise(dist_mat));
+    arma::vec q  = arma::quantile(dv, arma::vec{0.1, 0.9});
+    Rcpp::Rcout << "[DEBUG init] dist_mat: min=" << dist_mat.min() << " max=" << dist_mat.max()
+                << " q10=" << q(0) << " q90=" << q(1)
+                << " nan=" << arma::accu(arma::find_nonfinite(dist_mat)) << std::endl;
+  }
   R = exp(-dist_mat);
   Rcpp::Rcout << "[DEBUG after exp init] R: min=" << R.min() << " max=" << R.max()
               << " nan=" << arma::accu(arma::find_nonfinite(R)) << std::endl;
   // Rcpp::Rcout << "[DEBUG sum(R)] sum(R): min=" << find(arma::max(R, 0) < 0.05) << " max=" << sum(R,0).max()  << std::endl;
-  R = arma::square(R); // Regularization
   R.each_row() /= sum(R, 0);
   
   
@@ -251,7 +257,7 @@ void harmony::compute_objective() {
                 << " colSums min=" << arma::min(arma::sum(R, 0))
                 << " max=" << arma::max(arma::sum(R, 0)) << std::endl;
 
-  VECTYPE sigma_ldet = arma::sum(sigma,1); // trace of covariance of clusters
+  VECTYPE sigma_ldet = arma::sum(1/sigma,1); // trace of covariance of clusters
   float kmeans_error = as_scalar(my_accu(R % (dist_mat.each_col() % sigma_ldet)));
   float _entropy = as_scalar(my_accu(safe_entropy(R).each_col() % sigma_ldet));
   float _cross_entropy = as_scalar(my_accu((R.each_col() % sigma_ldet) % ((arma::repmat(theta.t(), K, 1) % log((O + E + 1) / ((2*E) + 1))) * Phi)));
@@ -317,13 +323,12 @@ int harmony::cluster_cpp() {
       MATTYPE diff = Z_corr;
       diff.each_col() -= Y.col(k);
       diff.each_col() %= (1.0f / sqrt(sigma.row(k))).t();
-      dist_mat.row(k) = arma::sqrt(sum(square(diff), 0));
+      dist_mat.row(k) = sum(square(diff), 0);
     }
     // dist_mat /= dist_mat.max() / 50;
     Rcpp::Rcout << "[DEBUG cold-start] dist_mat: min=" << dist_mat.min() << " max=" << dist_mat.max()
                 << " nan=" << arma::accu(arma::find_nonfinite(dist_mat)) << std::endl;
-    R = exp(-dist_mat);
-    R = arma::square(R); // Regularization
+    R = exp(-dist_mat);   
     R.each_row() /= sum(R, 0);
     E = sum(R, 1) * Pr_b.t();
     O = R * Phi_t;
@@ -418,7 +423,6 @@ int harmony::update_R() {
     {
       Timer t(timers["Rcells_update"]);
       Rcells = exp(-dist_matcells);
-      Rcells = arma::square(Rcells);
       Rcells = arma::normalise(Rcells, 1, 0);
       Rcells = Rcells % (harmony_pow(((2*E) + 1) / (O + E + 1), theta) * Phicells);
       Rcells = arma::normalise(Rcells, 1, 0); // L1 norm columns
