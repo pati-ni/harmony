@@ -64,6 +64,7 @@ public:
   VECTYPE Pr_b, theta, N_b, lambda;
   MATTYPE sigma;     // K×d: per-cluster per-dimension variance, estimated from data
   float sigma_scale; // scalar hyperparameter that globally scales sigma
+  float pc_scale;    // std dev of PC1, used to normalize Z_orig to unit variance on PC1
 
   // auxilary data structures
   vector<float> objective_kmeans, objective_kmeans_dist, objective_kmeans_entropy, objective_kmeans_cross, objective_harmony;

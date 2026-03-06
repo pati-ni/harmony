@@ -38,8 +38,12 @@ void harmony::setup(const RMAT& __Z, const RSPMAT& __Phi,
   d = __Z.n_rows;
 
     
-  Z_orig = conv_to<MATTYPE>::from(__Z);     
-  // Z_corr = arma::normalise(Z_orig, 2, 0);
+  Z_orig = conv_to<MATTYPE>::from(__Z);
+
+  // Scale entire matrix so that PC1 has unit variance
+  pc_scale = arma::as_scalar(arma::stddev(Z_orig.row(0)));
+  Z_orig /= pc_scale;
+
   Z_corr = Z_orig;
   
   Phi = conv_to<SPMAT>::from(__Phi);
@@ -677,7 +681,12 @@ void harmony::moe_correct_ridge_cpp() {
 }
 
 RMAT harmony::getZcorr() {
-  return conv_to<RMAT>::from(Z_corr);
+  float var_orig = arma::accu(arma::var(Z_orig, 0, 1));
+  float var_corr = arma::accu(arma::var(Z_corr, 0, 1));
+  float var_loss_pct = 100.0f * (1.0f - var_corr / var_orig);
+  Rcpp::Rcout << "[Harmony] Variance loss after correction: "
+              << var_loss_pct << "%" << std::endl;
+  return conv_to<RMAT>::from(Z_corr * pc_scale);
 }
 
 RMAT harmony::getR() {
@@ -685,12 +694,12 @@ RMAT harmony::getR() {
 }
 
 RMAT harmony::getCentroids() {
-  return conv_to<RMAT>::from(Y);
+  return conv_to<RMAT>::from(Y * pc_scale);
 }
 
 
 RMAT harmony::getZorig() {
-  return conv_to<RMAT>::from(Z_orig);
+  return conv_to<RMAT>::from(Z_orig * pc_scale);
 }
 
 
@@ -703,7 +712,6 @@ RCPP_MODULE(harmony_module) {
     .field("d", &harmony::d)
     .field("O", &harmony::O)
     .field("E", &harmony::E)
-    .field("Y", &harmony::Y)
     .field("Pr_b", &harmony::Pr_b)
     .field("B_vec", &harmony::B_vec)
     .field("alpha", &harmony::alpha)
