@@ -139,80 +139,13 @@ void harmony::init_cluster_cpp() {
 
   sigma = calculate_variance(Z_corr,Y, K);
   sigma *=sigma_scale;
-  {
-    arma::gmm_diag model;
-    model.set_params(
-		     conv_to<arma::mat>::from(Y),              // means:  d×K		    
-		     conv_to<arma::mat>::from(sigma.t()),  // dcovs: d×K (sigma is K×d)
-		     arma::ones<arma::rowvec>(K) / K           // hefts:  uniform mixing weights
-		     );
-    model.learn(
-      conv_to<arma::mat>::from(Z_corr),         // data:   d×N
-      K, arma::maha_dist, arma::keep_existing,
-      0,      // km_iter: skip k-means, preserve initial means
-      5,      // em_iter
-      1e-8,   // var_floor
-      verbose
-    );
-    
-    Y     = conv_to<MATTYPE>::from(model.means);      // d×K  updated centroids
-    sigma = conv_to<MATTYPE>::from(model.dcovs.t()); // K×d  per-cluster variances
-    Rcpp::Rcout << "[DEBUG init] sigma: min=" << sigma.min() << " max=" << sigma.max() << std::endl;
-  }
-
+  
   // Detect and revive dead clusters stuck at the origin
   VECTYPE data_norms(arma::sum(arma::square(Z_corr)).t());
   // arma::vec P = { 0.1 };
-  float ref_norm = as_scalar(arma::quantile(conv_to<arma::vec>::from(data_norms), arma::vec{0.02}));
-  // float ref_norm = as_scalar(arma::quantile(conv_to<arma::vec>::from(data_norms), P));
-  // float ref_norm = arma::median(data_norms);
-  while(false) {
-    VECTYPE Y_norms(arma::sum(arma::square(Y)).t());
-    arma::uvec live = arma::find(Y_norms >= ref_norm);
-    if (live.n_elem == K) break;  // no dead clusters
-
-    unsigned K_new = live.n_elem;
-    Rcpp::Rcout << "[DEBUG init] Dropping " << K - K_new
-                << " dead clusters, K: " << K << " -> " << K_new << std::endl;
-    Y     = Y.cols(live);
-    sigma = sigma.rows(live);
-    K     = K_new;
-
-    // Resize K-dependent buffers
-    dist_mat = zeros<MATTYPE>(K, N);
-    O        = zeros<MATTYPE>(K, B);
-    E        = zeros<MATTYPE>(K, B);
-
-
-    arma::kmeans(Y, Z_corr, K, arma::keep_existing, 2, verbose);
-    sigma = calculate_variance(Z_corr,Y, K);
-    sigma *= sigma_scale;
+  float ref_norm = as_scalar(arma::quantile(conv_to<arma::vec>::from(data_norms), arma::vec{0.02}));  
   
-  
-    arma::gmm_diag model;
-    model.set_params(
-		     conv_to<arma::mat>::from(Y),              // means:  d×K
-		     conv_to<arma::mat>::from(sigma.t()),  // dcovs: d×K (sigma is K×d)
-		     arma::ones<arma::rowvec>(K) / K           // hefts:  uniform mixing weights
-		     );
-    model.learn(
-		conv_to<arma::mat>::from(Z_corr),         // data:   d×N
-		K, arma::maha_dist, arma::keep_existing,
-		3,      // km_iter: skip k-means, preserve initial means
-		2,      // em_iter
-		1e-8,   // var_floor
-		verbose
-		);
-
-    Y     = conv_to<MATTYPE>::from(model.means);      // d×K  updated centroids
-    sigma = conv_to<MATTYPE>::from(model.dcovs.t()); // K×d  per-cluster variances
-    Rcpp::Rcout << "[DEBUG init] sigma (hard-assign): min=" << sigma.min()
-                << " max=" << sigma.max() << std::endl;
-  }
-
-  // sigma *= sigma_scale;
-  
-  // (3) ASSIGN CLUSTER PROBABILITIES via Mahalanobis distance
+  // ASSIGN CLUSTER PROBABILITIES via Mahalanobis distance
   for (unsigned k = 0; k < K; k++) {
     MATTYPE diff = Z_corr;
     diff.each_col() -= Y.col(k);
