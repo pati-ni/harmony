@@ -37,7 +37,7 @@ harmony_options <- function(
   max.iter.cluster = 4,
   epsilon.cluster = 1e-3,
   epsilon.harmony = 1e-2,
-  batch.prop.cutoff = 1e-5) {
+  batch.prop.cutoff = 1e-4) {
     
     block.size <- validate_block.size(block.size)
     

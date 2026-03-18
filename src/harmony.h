@@ -48,18 +48,25 @@ public:
 
   void init_cluster_cpp();
   void allocate_buffers();
-  void compute_objective(); 
+  void compute_R_from_dist_mat();
+  void compute_objective();
   int update_R();
   bool check_convergence(int type);
   void setY(const MATTYPE& Z);
+  void reassign_cluster(unsigned k);
   RMAT getZcorr();
   RMAT getZorig();
   RMAT getR();
   RMAT getCentroids();
-
+  RMAT getInitCentroids();
+  RVEC getClusterInit();
+  RVEC getRinit();
+  RMAT getDistMat();
 
   /* FIELDS */
-  MATTYPE R, Z_orig, Z_corr, Y;
+  MATTYPE R, Z_orig, Z_corr, Y, Y_init;
+  VECTYPE R_init;  // R[cluster_init[j], j] for each cell j
+  arma::uvec cluster_init;  // hard cluster assignment (argmin dist_mat) after init
   SPMAT Phi, Phi_moe, Phi_moe_t, Phi_t, Rk;
   VECTYPE Pr_b, theta, N_b, lambda;
   MATTYPE sigma;     // K×d: per-cluster per-dimension variance, estimated from data
@@ -82,7 +89,7 @@ public:
   std::vector<CellEntry> orig_index;
 
   // flags
-  bool ran_setup, ran_init, lambda_estimation,  verbose; // do_merge_R;
+  bool ran_setup, ran_init, lambda_estimation,  verbose, allow_reassign; // do_merge_R;
   
 };
 

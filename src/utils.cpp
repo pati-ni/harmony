@@ -19,16 +19,26 @@ MATTYPE initialize_centroids(const MATTYPE& X, const unsigned int K, bool verbos
   
   Progress p(K, verbose);
   std::set<unsigned> sup;
+
+  VECTYPE distances_tally(X.n_cols, arma::fill::zeros);
   
   // k-means++
   for (unsigned int i = 0; i < K; i++) {
     p.increment();
-    VECTYPE distances = arma::sqrt(arma::sum(arma::square(X.each_col() - Y.col(i))).t());
+    VECTYPE distances = arma::sqrt(arma::sum(arma::square(X.each_col() - Y.col(i))).t());   
     VECTYPE random_numbers(size(distances), arma::fill::randu);
+    if(i != 0){
+      // float r_eps = random_numbers.max();
+      // auto scaler = exp(-(distances_tally/distances_tally.max()*sqrt(i+1)));
+      // Rcpp::Rcout << "[initialize_centroids tally]" << scaler.max() / scaler.min() << std::endl;
+      // random_numbers %= scaler;
+      // random_numbers /= r_eps;
+      distances += distances_tally;
+    }
     
     // Weighted Random Sampling, sample from different expontential
     // distributions with distance as different rate parameters
-    VECTYPE prob = -arma::log(random_numbers) / distances;
+    VECTYPE prob = -arma::log(random_numbers) / ((1.0/distances.n_elem + ((distances / distances.max())*10)));
     
     auto index = prob.index_min();
     
@@ -41,6 +51,7 @@ MATTYPE initialize_centroids(const MATTYPE& X, const unsigned int K, bool verbos
     }
     sup.insert(index);
     Y.col(i) = X.col(index);
+    distances_tally += arma::sqrt(arma::sum(arma::square(X.each_col() - Y.col(i))).t());
   }
   
   return Y;
@@ -51,7 +62,7 @@ MATTYPE initialize_centroids(const MATTYPE& X, const unsigned int K, bool verbos
 MATTYPE kmeans_centers(const MATTYPE& X, const unsigned int K, bool verbose) {
 
   MATTYPE Y = initialize_centroids(X, K, verbose);
-  unsigned iterations = 4;
+  unsigned iterations = 35;
   for(unsigned i = 0; i < iterations; i++) {
     if (!arma::kmeans(Y, X, K, arma::keep_existing, 1, verbose)) {
       Rcpp::stop("Clustering failed");
@@ -77,14 +88,12 @@ MATTYPE calculate_variance(const MATTYPE& X, const MATTYPE& Y, int K) {
   // Per cluster: biased per-dimension variance from assigned cells
   for (unsigned k = 0; k < K; k++) {
     arma::uvec cells = arma::find(assignments == k);
+    std::cout << k << " "<< cells.n_elem << std::endl;
     if (cells.n_elem < 2) {
       Rcpp::Rcout << "[DEBUG init] error small cluster" << std::endl;
       continue;
     }
-    MATTYPE X_k    = X.cols(cells);
-    VECTYPE mean_k = arma::mean(X_k, 1);
-    VECTYPE var_k  = arma::mean(arma::square(X_k), 1) - arma::square(mean_k);
-    sigma.row(k)   = var_k.t();
+    sigma.row(k)   = arma::var(X.cols(cells), 1, 1).t();
   }
   return sigma;
 }
