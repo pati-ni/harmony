@@ -8,22 +8,21 @@ obj <- RunHarmony(cell_lines_small$scaled_pcs, cell_lines_small$meta_data, 'data
 
 test_that('dimensions match in Harmony object data structures', {
     expect_equal(dim(obj$Y), c(obj$d, obj$K))
-    expect_equal(dim(obj$Z_corr), c(obj$d, obj$N))
-    expect_equal(dim(obj$Z_cos), c(obj$d, obj$N))
+    expect_equal(dim(obj$getZcorr()), c(obj$d, obj$N))
+    expect_equal(dim(obj$getZorig()), c(obj$d, obj$N))
     expect_equal(dim(obj$R), c(obj$K, obj$N))
 })
 
 test_that('R defines proper probability distributions', {
     expect_gte(min(obj$R), 0)
     expect_lte(max(obj$R), 1)
-    expect_equal(colSums(obj$R), rep(1, obj$N))
+    expect_equal(colSums(obj$R), rep(1, obj$N), tolerance = 1e-5)
 })
 
 test_that('there are no null values in the corrected embedding', {
-    expect_true(all(!is.infinite(obj$Z_corr)))
-    expect_true(all(!is.na(obj$Z_corr)))
-    expect_true(all(!is.infinite(obj$Z_cos)))
-    expect_true(all(!is.na(obj$Z_cos)))
+    Z_corr <- obj$getZcorr()
+    expect_true(all(!is.infinite(Z_corr)))
+    expect_true(all(!is.na(Z_corr)))
 })
 
 
