@@ -52,7 +52,7 @@ MATTYPE initialize_centroids(const MATTYPE& X, const unsigned int K, bool verbos
 MATTYPE kmeans_centers(const MATTYPE& X, const unsigned int K, bool verbose) {
 
   MATTYPE Y = initialize_centroids(X, K, verbose);
-  unsigned iterations = 4;
+  unsigned iterations = 10;
   for(unsigned i = 0; i < iterations; i++) {
     if (!arma::kmeans(Y, X, K, arma::keep_existing, 1, DEBUG)) {
       Rcpp::stop("Clustering failed");
