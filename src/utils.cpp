@@ -36,7 +36,7 @@ MATTYPE initialize_centroids(const MATTYPE& X, const unsigned int K, bool verbos
     // Make sure we have not selected the same point for cluster centroid already
     // This can be happen particularly in small datasets
     while (sup.find(index) != sup.end()) {
-      std::cerr << index << "exists, retrying for cluster " << i << " " << distances(index) <<std::endl;
+      Rcpp::Rcerr << index << "exists, retrying for cluster " << i << " " << distances(index) <<std::endl;
       prob[index] = prob.max();
       index = prob.index_min();      
     }

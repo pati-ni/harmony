@@ -8,9 +8,9 @@
 #include "timer.h"
 
 void print_timers() {  
-  std::cerr << "Print timers" << std::endl;
+  Rcpp::Rcerr << "Print timers" << std::endl;
   for(auto const& t : timers) {
-    std::cerr << t.first << " I got " << t.second.iter << " iterations " << t.second.elapsed/1000 << " seconds" << std::endl;
+    Rcpp::Rcerr << t.first << " I got " << t.second.iter << " iterations " << t.second.elapsed/1000 << " seconds" << std::endl;
   }
 }
 
