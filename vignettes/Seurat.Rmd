@@ -38,9 +38,6 @@ install.packages('harmony')
 For this demo, we will be aligning two groups of PBMCs [Kang et al., 2017](https://doi.org/10.1038/nbt.4042). In this experiment, PBMCs are in stimulated and control conditions. The stimulated PBMC group was treated with interferon beta.
 
 
-```
-
-
 ## Create SeuratObject
 
 ```{r}
@@ -63,7 +60,7 @@ library(Matrix)
 ##setwd("/path/to/downloaded/files")
 genes =  read.table("GSE96583_batch2.genes.tsv.gz", header = FALSE, sep = "\t")
 
-pbmc.ctrl.full = as.readMM("GSM2560248_2.1.mtx.gz")
+pbmc.ctrl.full = readMM("GSM2560248_2.1.mtx.gz")
 colnames(pbmc.ctrl.full) = paste0(read.table("GSM2560248_barcodes.tsv.gz", header = FALSE, sep = "\t")[,1], "-1")
 rownames(pbmc.ctrl.full) = genes$V1
 
@@ -75,8 +72,7 @@ library(Seurat)
 
 pbmc <- CreateSeuratObject(counts = cbind(pbmc.stim.full, pbmc.ctrl.full), project = "PBMC", min.cells = 5)
 pbmc@meta.data$stim <- c(rep("STIM", ncol(pbmc.stim.full)), rep("CTRL", ncol(pbmc.ctrl.full)))
-
-
+```
 
 
 # Running Harmony
@@ -184,13 +180,13 @@ A set of internal algorithm parameters that can be overriden. For advanced users
 
 These parameters are Seurat-specific and do not affect the flow of the algorithm.
 
-#### `project_dim`
+#### `project.dim`
 
-Toggle-like parameter, by default `project_dim=TRUE`. When enabled, `RunHarmony()` calculates genomic feature loadings using Seurat's `ProjectDim()` that correspond to the harmonized cell embeddings.
+Toggle-like parameter, by default `project.dim=TRUE`. When enabled, `RunHarmony()` calculates genomic feature loadings using Seurat's `ProjectDim()` that correspond to the harmonized cell embeddings.
 
 #### `reduction.save`
 
-The new Reduced Dimension slot identifier. By default, `reduction.save=TRUE`. This option allows several independent runs of harmony to be retained in the appropriate slots in the SeuratObjects. It is useful if you want to try Harmony with multiple parameters and save them as e.g. 'harmony_theta0', 'harmony_theta1', 'harmony_theta2'.
+The new Reduced Dimension slot identifier. By default, `reduction.save="harmony"`. This option allows several independent runs of harmony to be retained in the appropriate slots in the SeuratObjects. It is useful if you want to try Harmony with multiple parameters and save them as e.g. 'harmony_theta0', 'harmony_theta1', 'harmony_theta2'.
 
 ### Miscellaneous parameters
 
