@@ -657,6 +657,20 @@ RMAT harmony::getZorig() {
   return conv_to<RMAT>::from(Z_orig);
 }
 
+RMAT harmony::getLambda(){
+  RMAT lambda_matR = zeros<RMAT>(K, B+1);
+  for (unsigned k = 0; k < K; ++k) {
+    VECTYPE _l;
+    if (lambda_estimation) {
+      _l = find_lambda_cpp(alpha, E.row(k).t());
+    } else {
+      _l = lambda;
+    }
+    lambda_matR.row(k) = conv_to<RVEC>::from(_l).t();
+  }
+  return lambda_matR;
+}
+
 
 RCPP_MODULE(harmony_module) {
   class_<harmony>("harmony")
@@ -685,6 +699,7 @@ RCPP_MODULE(harmony_module) {
     .field("max_iter_kmeans", &harmony::max_iter_kmeans)
     .method("getZcorr", &harmony::getZcorr)
     .method("getZorig", &harmony::getZorig)
+    .method("getLambda", &harmony::getLambda)
     .method("getR", &harmony::getR)
     .method("getCentroids", &harmony::getCentroids)
     .method("check_convergence", &harmony::check_convergence)

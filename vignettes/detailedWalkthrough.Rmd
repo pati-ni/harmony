@@ -413,7 +413,7 @@ round(observed_cell_counts)
 
 
 
-Initially, the largest error we had was in cluster 1 with 12 out of 1952 cells misclustered. So our initial error rate was at most 0.6%. Let's take a look at the error rates in our maximum diversity clustering (shown below). Applying the same kind of error analysis, we see that we have <0.6% error across all the clusters. 
+Initially, the largest error we had was in cluster 2 with 2 out of 462 cells misclustered. So our initial error rate was at most 0.5%. Let's take a look at the error rates in our maximum diversity clustering (shown below). Applying the same kind of error analysis, we see that we have <0.6% error across all the clusters. 
 
 It is worth noting that in the original clustering, clusters 2, 4, and 5 had 0% error. But they also had almost no diversity. These clusters have incurred a non-zero error but gained substantial diversity. This trade-off between accuracy and diversity is present in all integration settings. 
 
@@ -639,10 +639,12 @@ $W_k[3] = \beta_{3, k} \mbox{  (for dataset 293T)}$
 W <- list()
 ## Convert sparse data structures to dense matrix
 Phi.moe <- as.matrix(phi_moe)
-lambda <- diag(c(harmonyObj$lambda))
+lambda_mat <- harmonyObj$getLambda()
+
 ## Get beta coefficients for all the clusters
 for (k in 1:harmonyObj$K) {
-    W[[k]] <- solve(Phi.moe %*% diag(harmonyObj$R[k, ]) %*% t(Phi.moe) + lambda) %*%
+    lambda <- diag(lambda_mat[k,])
+    W[[k]] <- solve(Phi.moe %*% diag(harmonyObj$R[k, ]) %*% t(as.matrix(Phi.moe)) + lambda) %*%
               (Phi.moe %*% diag(harmonyObj$R[k, ])) %*% Z_orig
 }
 

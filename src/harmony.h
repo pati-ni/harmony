@@ -56,7 +56,7 @@ public:
   RMAT getZorig();
   RMAT getR();
   RMAT getCentroids();
-
+  RMAT getLambda();
 
   /* FIELDS */
   MATTYPE R, Z_orig, Z_corr, Y;

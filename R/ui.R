@@ -94,7 +94,7 @@ RunHarmony.default <- function(
   vars_use,
   theta = NULL,
   sigma = 0.1,
-  lambda = 1,
+  lambda = NULL,
   nclust = NULL,
   max_iter = 10,
   early_stop = TRUE,

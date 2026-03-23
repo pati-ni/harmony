@@ -3,7 +3,7 @@ library(harmony)
 data(cell_lines_small)
 
 obj <- RunHarmony(cell_lines_small$scaled_pcs, cell_lines_small$meta_data, 'dataset',
-                  theta = 1, nclust = 50, lambda = .1, max_iter = 5, return_object = TRUE,
+                  theta = 1, nclust = 50, max_iter = 5, return_object = TRUE,
                   verbose = FALSE, .options = harmony_options(max.iter.cluster = 10))
 
 test_that('dimensions match in Harmony object data structures', {
@@ -29,11 +29,11 @@ test_that('there are no null values in the corrected embedding', {
 
 test_that('increasing theta decreases chi2 between Cluster and Batch assign', {
     obj0 <- RunHarmony(cell_lines_small$scaled_pcs, cell_lines_small$meta_data, 'dataset',
-                       theta = 0, nclust = 20, lambda = .1, max_iter = 2, return_object = TRUE,
-                       verbose = FALSE, .options = harmony_options(max.iter.cluster = 5))
+                       theta = 0, nclust = 20, max_iter = 2, return_object = TRUE,
+                       verbose = FALSE)
     obj1 <- RunHarmony(cell_lines_small$scaled_pcs, cell_lines_small$meta_data, 'dataset',
-                       theta = 1, nclust = 20, lambda = .1, max_iter = 2, return_object = TRUE,
-                       verbose = FALSE, .options = harmony_options(max.iter.cluster = 5))
+                       theta = 1, nclust = 5, max_iter = 2, return_object = TRUE,
+                       verbose = FALSE)
 
     expect_gt(
         sum(((obj0$O - obj0$E) ^ 2) / obj0$E),
