@@ -119,7 +119,7 @@ harmony_embeddings[seq_len(5), seq_len(5)]
 harmony_object <- RunHarmony(pca_matrix, meta_data, 'dataset', return_object=TRUE)
 dim(harmony_object$Y) ## cluster centroids
 dim(harmony_object$R) ## soft cluster assignment
-dim(harmony_object$Z_corr) ## corrected PCA embeddings
+dim(harmony_object$getZcorr()) ## corrected PCA embeddings
 head(harmony_object$O) ## batch by cluster co-occurence matrix
 
 }
