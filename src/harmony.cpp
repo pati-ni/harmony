@@ -382,7 +382,7 @@ void harmony::moe_correct_ridge_cpp() {
 	cells[current_covariate] += O(k,b);
       }
     }
-    if (verbose) {
+    if (DEBUG) {
       for (unsigned c =0; c < B_vec.size(); ++c ) {
 	std::cout << "Cluster k:" << k <<" Covariate level " << c << " with cells: "<< cells[c] <<" Included " << cov_levels[c] << " out of " << B_vec[c] << std::endl;
       }
@@ -634,7 +634,10 @@ void harmony::moe_correct_ridge_cpp() {
     delete _Z_tmp;
   }
   Y = arma::normalise(Y, 2, 0);
-  print_timers();
+  if (DEBUG) {
+    print_timers();
+  }
+  
 }
 
 RMAT harmony::getZcorr() {

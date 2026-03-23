@@ -1,6 +1,8 @@
 #pragma once
 #include "types.h"
 #include <RcppArmadillo.h>
+#define DEBUG false
+
 
 MATTYPE kmeans_centers(const MATTYPE& X, const unsigned int K, bool verbose);
 
