@@ -65,14 +65,19 @@ validate_block.size <- function(block.size) {
 
 #' @importFrom methods hasArg
 check_legacy_args <- function(...) {
-    if (hasArg("do_pca") || hasArg("npcs")) legacy_warning("do_pca_npcs")
-    if (hasArg("tau")) legacy_warning("tau")
-    if (hasArg("block.size")) legacy_warning("block.size")
-    if (hasArg("max.iter.harmony")) legacy_warning("max.iter.harmony")
-    if (hasArg("max.iter.cluster")) legacy_warning("max.iter.cluster")
-    if (hasArg("epsilon.cluster")) legacy_warning("epsilon.cluster")
-    if (hasArg("epsilon.harmony")) legacy_warning("epsilon.harmony")
-    
+    all.args = list(...)    
+    legarg <- c("do_pca", "npcs", "tau", "block.size",
+                "max.iter.harmony", "max.iter.cluster",
+                "epsilon.cluster", "epsilon.harmony")
+    for(arg in names(all.args)) {
+        if (arg %in% legarg) {
+            legacy_warning(arg)
+            all.args[[arg]] = NULL
+        }
+    }
+    if(length(all.args) > 0){
+        warning(paste("Argument", names(all.args),"is unhandled and ignored!\n"))
+    }
 }
 
 
@@ -114,7 +119,7 @@ legacy_warning <- function(param) {
                      "epsilon.cluster")) {
         warn_str <- common_warn
     }
-    if (param == "do_pca_npcs") {
+    if (param %in% c("do_pca", "npcs")) {
         warn_str <- do_pca_npcs_warn
     }
     if (param == "max.iter.harmony") {

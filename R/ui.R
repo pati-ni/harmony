@@ -113,11 +113,12 @@ RunHarmony.default <- function(
     ## set threads and harmony runs in single-thread mode
     set.cores <- setOMPthreads(ncores)
     
+    ## Check legacy arguments
+    check_legacy_args(...)
     
     tryCatch({
-        ## Check legacy arguments
-        check_legacy_args(...)
-
+        
+        
         ## Set threads if BLAS threas are set/detected properly
         if (set.cores) {
             prev.ncores.blas <- RhpcBLASctl::blas_get_num_procs()
