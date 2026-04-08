@@ -1,0 +1,143 @@
+---
+title: "Quick start to Harmony"
+author: "Korsunsky et al.: Fast, sensitive, and accurate integration of single 
+cell data with Harmony"
+output:
+  rmarkdown::html_vignette:
+    code_folding: show
+vignette: >
+    %\VignetteIndexEntry{Quick start to Harmony}
+    %\VignetteEngine{knitr::rmarkdown}
+    %\VignetteEncoding{UTF-8} 
+---
+  
+
+# Introduction
+
+Harmony is an algorithm for performing integration of single cell genomics
+datasets. Please check out our latest 
+[manuscript on Nature Methods](https://www.nature.com/articles/s41592-019-0619-0). 
+
+![](main.jpg){width=100%}
+
+
+# Installation
+
+Install Harmony from CRAN with standard commands.
+
+```{r eval=FALSE}
+install.packages('harmony')
+```
+
+Once Harmony is installed, load it up! 
+
+```{r}
+library(harmony)
+```
+
+
+# Integrating cell line datasets from 10X
+
+The example below follows Figure 2 in the manuscript. 
+
+We downloaded 3 cell line datasets from the 10X website. The first two (jurkat
+and 293t) come from pure cell lines while the *half* dataset is a 50:50
+mixture of Jurkat and HEK293T cells. We inferred cell type with the canonical 
+marker XIST, since the two cell lines come from 1 male and 1 female donor. 
+
+* support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/jurkat
+* support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/293t
+* support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/jurkat:293t_50:50
+
+We library normalized the cells, log transformed the counts, and scaled the 
+genes. Then we performed PCA and kept the top 20 PCs. The PCA embeddings and 
+meta data are available as part of this package. 
+
+```{r}
+data(cell_lines)
+V <- cell_lines$scaled_pcs
+meta_data <- cell_lines$meta_data
+
+```
+
+
+Initially, the cells cluster by both dataset (left) and cell type (right). 
+
+```{r class.source='fold-hide', fig.width=5, fig.height=3, fig.align="center"}
+
+library(ggplot2)
+
+do_scatter <- function(xy, meta_data, label_name, base_size = 12) {    
+    palette_use <- c(`jurkat` = '#810F7C', `t293` = '#D09E2D',`half` = '#006D2C')
+    xy <- xy[, 1:2]
+    colnames(xy) <- c('X1', 'X2')
+    plt_df <- xy %>% data.frame() %>% cbind(meta_data)
+    plt <- ggplot(plt_df, aes(X1, X2, col = !!rlang::sym(label_name), fill = !!rlang::sym(label_name))) + 
+        theme_test(base_size = base_size) +
+        guides(color = guide_legend(override.aes = list(stroke = 1, alpha = 1,
+                                                        shape = 16, size = 4))) +
+        scale_color_manual(values = palette_use) +
+        scale_fill_manual(values = palette_use) +
+        theme(plot.title = element_text(hjust = .5)) +
+        labs(x = "PC 1", y = "PC 2") +
+        theme(legend.position = "none") +
+        geom_point(shape = '.')
+    
+    ## Add labels
+    data_labels <- plt_df %>%
+        dplyr::group_by(!!rlang::sym(label_name)) %>%
+        dplyr::summarise(X1 = mean(X1), X2 = mean(X2)) %>%
+        dplyr::ungroup()
+    plt + geom_label(data = data_labels, aes(label = !!rlang::sym(label_name)), 
+                            color = "white", size = 4)
+}
+p1 <- do_scatter(V, meta_data, 'dataset') + 
+    labs(title = 'Colored by dataset')
+p2 <- do_scatter(V, meta_data, 'cell_type') + 
+    labs(title = 'Colored by cell type')
+
+cowplot::plot_grid(p1, p2)
+
+```
+
+Let's run Harmony to remove the influence of dataset-of-origin from the cell
+embeddings.
+
+```{r}
+harmony_embeddings <- harmony::RunHarmony(
+    V, meta_data, 'dataset', verbose=FALSE
+)
+
+```
+
+After Harmony, the datasets are now mixed (left) and the cell types are still
+separate (right). 
+
+```{r, fig.width=5, fig.height=3, fig.align="center"}
+p1 <- do_scatter(harmony_embeddings, meta_data, 'dataset') + 
+    labs(title = 'Colored by dataset')
+p2 <- do_scatter(harmony_embeddings, meta_data, 'cell_type') + 
+    labs(title = 'Colored by cell type')
+cowplot::plot_grid(p1, p2, nrow = 1)
+
+```
+
+# Next Steps
+
+## Interfacing to software packages
+
+You can also run Harmony as part of an established pipeline in several packages, such as Seurat. For these vignettes, please [visit our github page](https://github.com/immunogenomics/harmony/).
+
+
+## Detailed breakdown of the Harmony algorithm
+
+For more details on how each part of Harmony works, consult our more detailed
+[vignette](https://htmlpreview.github.io/?https://github.com/immunogenomics/harmony/blob/master/doc/detailedWalkthrough.html)
+"Detailed Walkthrough of Harmony Algorithm".
+
+# Session Info
+
+```{r}
+sessionInfo()
+
+```

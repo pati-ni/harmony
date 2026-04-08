@@ -1,0 +1,128 @@
+# Harmony
+
+[![Travis-CI Build
+Status](https://travis-ci.org/immunogenomics/harmony.svg?branch=master)](https://travis-ci.org/immunogenomics/harmony)
+[![AppVeyor Build
+Status](https://ci.appveyor.com/api/projects/status/github/immunogenomics/harmony?branch=master&svg=true)](https://ci.appveyor.com/project/immunogenomics/harmony)
+[![DOI](https://zenodo.org/badge/doi/10.1038/s41592-019-0619-0.svg)](https://doi.org/10.64898/2026.03.16.711825)
+
+*Integration of large, complex single-cell datasets with Harmony2*
+
+Check out our pre-print in biorxiv: - [nature
+website](https://doi.org/10.64898/2026.03.16.711825) - [Previous version
+of
+harmony](https://www.nature.com/articles/s41592-019-0619-0.epdf?shared_access_token=rDg_Rd07lrFXExt_ySj7V9RgN0jAjWel9jnR3ZoTv0NfDJkKCfDV_X9Mq3lweQmKiXEXxhrebQRjJEZdc-xNv6-7ZN1XotlD_mo5TSS4Z4eWn-kUo6mBwA5dEAKlTfR8OT6E10MZY_E-906ajbzvgg%3D%3D) -
+[package website](https://pati-ni.github.io/harmony/)
+
+For Python users, check out the [harmonypy
+package](https://github.com/slowkow/harmonypy) by Kamil Slowikowski.
+
+# System requirements
+
+Harmony has been tested on R versions \>= 4.2. Please consult the
+DESCRIPTION file for more details on required R packages. Harmony has
+been tested on Linux, OS X, and Windows platforms.
+
+# Installation
+
+To run Harmony, open R and install harmony from CRAN (15 seconds):
+
+``` r
+
+install.packages("harmony")
+```
+
+If you’d like the latest development version, install from this github
+directly:
+
+``` r
+
+devtools::install_github("immunogenomics/harmony", build_vignettes=TRUE)
+```
+
+# Usage
+
+Harmony is designed to be user-friendly and supports some
+SingleCellExperiment and Seurat R analysis pipelines. Alternatively, it
+can be used in standalone mode.
+
+## Quick Start
+
+### Standalone Mode
+
+Check out this
+[vignette](https://pati-ni.github.io/harmony/articles/quickstart.html)
+for a quick start tutorial which demonstrates the usage of the tool in
+standalone mode (~4 seconds).
+
+At minimum the following parameters need to be specified to achieve an
+integration. For a few samples \< 100K cells integration should finish
+within seconds.
+
+``` r
+
+library(harmony)
+my_harmony_embeddings <- RunHarmony(my_pca_embeddings, meta_data, "dataset")
+```
+
+## Seurat Objects
+
+By default, the harmony API works on Seurats PCA cell embeddings and
+corrects them. You can run Harmony within your Seurat workflow with
+[`RunHarmony()`](https://pati-ni.github.io/harmony/reference/RunHarmony.md).
+Prior
+[`RunHarmony()`](https://pati-ni.github.io/harmony/reference/RunHarmony.md)
+the PCA cell embeddings need to be precomputed through Seurat’s API. For
+downstream analyses, use the `harmony` embeddings instead of `pca`.
+
+For example, the following snippet run Harmony and then calculates UMAP
+of the corrected input embeddings:
+
+``` r
+
+seuratObj <- RunHarmony(seuratObj, "dataset")
+seuratObj <- RunUMAP(seuratObj, reduction = "harmony")
+```
+
+For a more detailed overview of the
+[`RunHarmony()`](https://pati-ni.github.io/harmony/reference/RunHarmony.md)
+Seurat interface check, the [Seurat
+vignette](https://pati-ni.github.io/harmony/articles/Seurat.html)
+
+## Harmony with two or more covariates
+
+Harmony can integrate over multiple covariates. To do this, specify a
+vector covariates to integrate.
+
+``` r
+
+my_harmony_embeddings <- RunHarmony(
+  my_pca_embeddings, meta_data, c("dataset", "donor", "batch_id")
+)
+```
+
+Do the same with your Seurat object:
+
+``` r
+
+seuratObject <- RunHarmony(seuratObject, c("dataset", "donor", "batch_id"))
+```
+
+## Advanced tutorial
+
+The examples above all return integrated PCA embeddings. We created a
+[detailed
+walkthrough](https://pati-ni.github.io/harmony/articles/detailedWalkthrough.html)
+that explores the internal data structures and mechanics of the Harmony
+algorithm.
+
+# Performance Notes
+
+OpenBLAS will make a huge performance difference. If you are not using
+this version of BLAS have a look at the PERFORMANCE.md
+
+If you are using R in windows, to use OpenBLAS you need to modify build
+flags. PERFORMANCE.md will show you how to increase the performance.
+
+To get the most performance with large datasets (\>10M cells) see the
+OpenMP notes in PERFORMANCE.md.

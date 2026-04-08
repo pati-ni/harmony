@@ -1,0 +1,41 @@
+: ${R_HOME=`R RHOME`}
+if test -z "${R_HOME}"; then
+  echo "Could not determine R_HOME"
+  exit 1
+fi
+
+CC=`"${R_HOME}/bin/R" CMD config CC`
+CFLAGS=`"${R_HOME}/bin/R" CMD config CFLAGS`
+BLAS_LIBS=`"${R_HOME}/bin/R" CMD config BLAS_LIBS`
+LAPACK_LIBS=`"${R_HOME}/bin/R" CMD config LAPACK_LIBS`
+FLIBS=`"${R_HOME}/bin/R" CMD config FLIBS`
+
+cat > conftest.c << EOF
+extern void sgemm_(const char*, const char*, const int*, const int*, const int*,
+                   const float*, const float*, const int*,
+                   const float*, const int*,
+                   const float*, float*, const int*);
+int main(void) {
+    const char c = 'N';
+    const int n = 0;
+    const float f = 0.0f;
+    float out = 0.0f;
+    sgemm_(&c, &c, &n, &n, &n, &f, &f, &n, &f, &n, &f, &out, &n);
+    return 0;
+}
+EOF
+
+ARMA_BLAS_FLAGS=""
+if ${CC} ${CFLAGS} conftest.c -o conftest.exe ${LAPACK_LIBS} ${BLAS_LIBS} ${FLIBS} 2>/dev/null; then
+    echo "* Single-precision BLAS routines detected -- using external BLAS"
+else
+    echo "* Single-precision BLAS routines not found -- using Armadillo internal routines"
+    ARMA_BLAS_FLAGS="-DARMA_DONT_USE_BLAS -DARMA_DONT_USE_LAPACK"
+fi
+
+rm -f conftest.c conftest.exe conftest.o
+
+cat > src/Makevars.win << MKVARS
+PKG_LIBS = \$(LAPACK_LIBS) \$(BLAS_LIBS) \$(FLIBS)
+PKG_CXXFLAGS = -DARMA_USE_CURRENT ${ARMA_BLAS_FLAGS}
+MKVARS
